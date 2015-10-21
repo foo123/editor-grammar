@@ -1,2 +1,5 @@
 # editor-grammar
-Codebase of editor-grammar (and all supported editors, ace, codemirror, prism)
+
+Invariant Codebase of editor-grammar
+
+Used as a git submodule to codemiror-grammar, ace-grammar, prism-grammar
