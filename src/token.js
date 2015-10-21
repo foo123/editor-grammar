@@ -361,7 +361,9 @@ function t_simple( t, stream, state, token )
     self.$msg = self.msg || null;
     
     // match SOF (start-of-file, first line of source)
-    if ( T_SOF === type ) { ret = 0 === line; }
+    if ( T_SOF === type ) { ret = 0 === state.line; }
+    // match FNBL (first non-blank line of source)
+    else if ( T_FNBL === type ) { ret = state.bline+1 === state.line; }
     // match SOL (start-of-line)
     else if ( T_SOL === type ) { ret = stream.sol(); }
     // match EOL (end-of-line) ( with possible leading spaces )
@@ -480,11 +482,12 @@ function t_block( t, stream, state, token )
                 token.T = type; token.id = block; token.type = modifier || ret;
                 token.str = stream.sel(pos, stream_pos); token.match = null;
                 token.pos = [line, pos, line, stream_pos];
-                push_at( stack, stack_pos, t_clone( self, is_required ), '$id', $id );
+                push_at( stack, stack_pos, t_clone( self, is_required, 0, $id ) );
                 return modifier || ret;
             }
         }
         
+        stream_pos = stream.pos;
         ended = t_match( block_end, stream );
         continue_to_next_line = is_multiline;
         continued = 0;
@@ -517,7 +520,7 @@ function t_block( t, stream, state, token )
                         ret = block;
                         ended = 1;
                     }
-                    b_end = stream.cur().slice(b_inside_rest.length);
+                    b_end = stream.sel(stream_pos, stream.pos);
                     break;
                 }
                 else
@@ -526,12 +529,13 @@ function t_block( t, stream, state, token )
                     b_inside_rest += next;
                 }
                 char_escaped = is_escaped && !char_escaped && esc_char === next;
+                stream_pos = stream.pos;
             }
         }
         else
         {
             ret = is_eol ? block_interior : block;
-            b_end = stream.cur().slice(b_inside_rest.length);
+            b_end = stream.sel(stream_pos, stream.pos);
         }
         continue_to_next_line = is_multiline || (is_escaped && char_escaped);
         
@@ -546,7 +550,7 @@ function t_block( t, stream, state, token )
         {
             state.block.ip = block_inside_pos;  state.block.ep = block_end_pos;
             state.block.i = b_inside; state.block.e = b_end;
-            push_at( stack, stack_pos, t_clone( self, is_required ), '$id', $id );
+            push_at( stack, stack_pos, t_clone( self, is_required, 0, $id ) );
         }
         token.T = type; token.id = block; token.type = modifier || ret;
         token.str = stream.sel(pos, stream.pos); token.match = null;
@@ -614,6 +618,7 @@ function t_composite( t, stream, state, token )
             {
                 tokens_err++;
                 stream.bck( stream_pos );
+                stack.length = stack_pos;
             }
         }
         
@@ -639,7 +644,7 @@ function t_composite( t, stream, state, token )
             if ( true !== style || T_EMPTY !== tokenizer.type )
             {
                 for (i=n-1; i>0; i--)
-                    push_at( stack, stack_pos+n-i-1, t_clone( tokens[ i ], 1, modifier ), '$id', $id );
+                    push_at( stack, stack_pos+n-i-1, t_clone( tokens[ i ], 1, modifier, $id ) );
             }
                 
             return style;
@@ -649,6 +654,7 @@ function t_composite( t, stream, state, token )
             if ( match_all ) self.status |= ERROR;
             else self.status &= CLEAR_ERROR;
             stream.bck( stream_pos );
+            stack.length = stack_pos;
         }
         else if ( match_all && (tokenizer.status & REQUIRED) )
         {
@@ -657,6 +663,18 @@ function t_composite( t, stream, state, token )
         
         if ( self.status && !self.$msg ) self.$msg = t_err( tokenizer );
         return false;
+    }
+
+    else if ( T_POSITIVE_LOOKAHEAD === type )
+    {
+        // TODO
+        self.status = 0; return false;
+    }
+
+    else if ( T_NEGATIVE_LOOKAHEAD === type )
+    {
+        // TODO
+        self.status = 0; return false;
     }
 
     else //if ( T_REPEATED & type )
@@ -677,7 +695,7 @@ function t_composite( t, stream, state, token )
                 {
                     // push it to the stack for more
                     self.found = found;
-                    push_at( stack, stack_pos, t_clone( self ), '$id', $id );
+                    push_at( stack, stack_pos, t_clone( self, 0, 0, $id ) );
                     self.found = 0;
                     return style;
                 }
@@ -688,7 +706,7 @@ function t_composite( t, stream, state, token )
                 tokens_required++;
                 err.push( t_err( tokenizer ) );
             }
-            if ( tokenizer.status & ERROR ) stream.bck( stream_pos );
+            if ( tokenizer.status & ERROR ) { stream.bck( stream_pos ); stack.length = stack_pos; }
         }
         
         if ( found < min ) self.status |= REQUIRED;

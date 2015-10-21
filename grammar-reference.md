@@ -114,7 +114,7 @@ example:
 
 * a literal `false` or `0` valued token matches `empty production` ; can be useful in defining syntax sequences that can repeat (can be used as alternative to `"zeroOrMore"`, `"oneOrMore"` group types, plus give a familiar feel to defining rule productions )
 
-* a literal `empty string` token (  `""`  ) matches `non-space` ; can be useful when multiple tokens should be consecutive with no space between them
+* a literal `empty string` token (  `''`  ) matches `non-space` ; can be useful when multiple tokens should be consecutive with no space between them
 
 * a literal `string` becomes a token (eg inside Syntax model sequence) with a `tokenID` same as its `literal value`
 
@@ -286,11 +286,12 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
 **Note:** In order for a (grammar) specification for (programming) language highlight to be detailed and self-contained (to be re-usable and flexible under the most general conditions), it should model all available types of tokens which play a part in the code and the way it is highlighted (usualy not modeled by other approaches or other grammar specifications), for example: 
 
 
-* `<start-of-file>` token (modelled as `^^`, see below)
-* `<start-of-line>` token (modelled as `^`, see below)
-* `<end-of-line>` token (modelled as `$`, see below)
-* `<up-to-line-end>` token (modelled as `null`, see above, `block` tokens)
-* `<non-space>` token (modelled as `''`, see below)
+* `<start-of-file>` token (modeled as `^^`, see below)
+* `<fist-non-blank-line>` token (modeled as `^^1`, see below)
+* `<start-of-line>` token (modeled as `^`, see below)
+* `<end-of-line>` token (modeled as `$`, see below)
+* `<up-to-line-end>` token (modeled as `null`, see above, `block` tokens)
+* `<non-space>` token (modeled as `''`, see below)
 * `<indentation>` token (not available yet)
 * `<de-indentation>` token (not available yet)
 * and so on..
@@ -389,7 +390,10 @@ Specificaly:
 // literal tokens wrapped in brackets (e.g [abc]) are equivalent to matching any of the enclosed characters (like in regular expressions)
 
 // note: LIKE REGULAR EXPRESSIONS having ^ first in a character selection, e.g [^abc] provides a NEGATIVE match
-// note2: the (PEG) negative lookahead feature might be added in future versions (along with positive lookahead feature)
+// note2: the PEG features
+// 1. negative lookahead feature (i.e not-predicate !t)
+// 2. positive lookahead feature (i.e and-predicate &t)
+// are currently NOT supported
 
 // regular expressions can also be defined inside a syntax rule, using /../[i] format, e.g /abc/,  /abc/i 
 // this will create a new simple token (with token_id=/abc/i) which is a regular expression
@@ -399,6 +403,7 @@ Specificaly:
 // zero literal token w/o quotes (i.e 0) matches EMPTY production (i.e succeeds always)
 
 // ^^ literal token w/o quotes (i.e ^^) matches SOF (i.e start-of-file, first line of code)
+// ^^1 literal token w/o quotes (i.e ^^1) matches FNBL (i.e first non-blank line of code)
 // ^ literal token w/o quotes (i.e ^) matches SOL (i.e start-of-line, any line)
 // $ literal token w/o quotes (i.e $) matches EOL (i.e end-of-line, any line, along with any extra space)
 

@@ -1,7 +1,8 @@
 
 //
 // tokenizer helpers
-var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g, peg_bnf_special_re = /^([.\[\]{}()*+?\/|'"]|\s)/;
+var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g,
+    peg_bnf_special_re = /^([.!&\[\]{}()*+?\/|'"]|\s)/;
 
 function esc_re( s )
 {
@@ -593,6 +594,18 @@ function preprocess_grammar( grammar )
                 tok.tokens = tok['oneOrMore'];
                 del(tok,'oneOrMore');
             }
+            else if ( tok['positiveLookahead'] || tok['lookahead'] )
+            {
+                tok.type = "positiveLookahead";
+                tok.tokens = tok['positiveLookahead'] || tok['lookahead'];
+                if ( tok['lookahead'] ) del(tok,'lookahead'); else del(tok,'positiveLookahead');
+            }
+            else if ( tok['negativeLookahead'] )
+            {
+                tok.type = "negativeLookahead";
+                tok.tokens = tok['negativeLookahead'];
+                del(tok,'negativeLookahead');
+            }
         }
         else if ( tok.type )
         {
@@ -649,6 +662,10 @@ function preprocess_grammar( grammar )
             {
                 tok.type = "sequence";
             }
+            else if ( 'lookahead' === tl )
+            {
+                tok.type = "positiveLookahead";
+            }
         }
     }
     return grammar;
@@ -668,7 +685,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
 {
     var alternation, sequence, token, literal, repeat, entry, prev_entry,
         t, c, fl, prev_token, curr_token, stack, tmp,
-        modifier = false, lookahead = false, modifier_preset;
+        modifier = false, modifier_preset;
     
     modifier_preset = !!tok.modifier ? tok.modifier : null;
     t = new String( trim(tok) ); t.pos = 0;
@@ -725,6 +742,12 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                         if ( !Lex[$T_SOF$] ) Lex[$T_SOF$] = { type:"simple", tokens:T_SOF };
                         sequence.push( $T_SOF$ );
                     }
+                    else if ( '^^1' === token )
+                    {
+                        // interpret as FNBL tokenizer
+                        if ( !Lex[$T_FNBL$] ) Lex[$T_FNBL$] = { type:"simple", tokens:T_FNBL };
+                        sequence.push( $T_FNBL$ );
+                    }
                     else if ( '^' === token )
                     {
                         // interpret as SOL tokenizer
@@ -747,7 +770,10 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
             
                 if ( '.' === c )
                 {
-                    modifier = true;
+                    // a dot by itself, not specifying a modifier
+                    if ( sequence.length && t.pos < t.length && 
+                        !peg_bnf_special_re.test(t[CHAR](t.pos)) ) modifier = true;
+                    else token += c;
                 }
                 
                 else if ( '"' === c || "'" === c )
@@ -766,67 +792,6 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                         if ( !Lex[$T_NONSPACE$] ) Lex[$T_NONSPACE$] = { type:"simple", tokens:'' };
                         sequence.push( $T_NONSPACE$ );
                     }
-                }
-                
-                else if ( '/' === c )
-                {
-                    // literal regex token
-                    literal = get_delimited( t, c, '\\', true ); fl = '';
-                    if ( literal.length )
-                    {
-                        if ( t.pos < t.length && 'i' === t[CHAR](t.pos) ) { t.pos++; fl = 'i'; }
-                        curr_token = '/' + literal + '/' + fl;
-                        if ( !Lex[curr_token] ) Lex[curr_token] = { type:'simple', tokens:new_re("^("+literal+")",fl) };
-                        sequence.push( curr_token );
-                    }
-                }
-                
-                else if ( '*' === c || '+' === c || '?' === c )
-                {
-                    // repeat modifier, applies to token that comes before
-                    prev_token = sequence[sequence.length-1];
-                    curr_token = '' + prev_token + c;
-                    if ( !Syntax[ curr_token ] )
-                        Syntax[ curr_token ] = {
-                            type:'*' === c ? 'zeroOrMore' : ('+' === c ? 'oneOrMore' : 'zeroOrOne'),
-                            tokens:[prev_token]
-                        }
-                    sequence[sequence.length-1] = curr_token;
-                }
-                
-                else if ( '{' === c )
-                {
-                    // literal repeat modifier, applies to token that comes before
-                    repeat = get_delimited( t, '}', false );
-                    repeat = map( repeat.split( ',' ), trim );
-                    
-                    if ( !repeat[0].length ) repeat[0] = 0; // {,m} match 0 times or more
-                    else repeat[0] = parseInt(repeat[0], 10) || 0;// {n,m} match n times up to m times
-                    if ( 0 > repeat[0] ) repeat[0] = 0;
-                    
-                    if ( 2 > repeat.length ) repeat.push( repeat[0] ); // {n} match exactly n times
-                    else if ( !repeat[1].length ) repeat[1] = INF; // {n,} match n times or more (INF)
-                    else repeat[1] = parseInt(repeat[1], 10) || INF; // {n,m} match n times up to m times
-                    if ( 0 > repeat[1] ) repeat[1] = 0;
-                    
-                    prev_token = sequence[sequence.length-1];
-                    curr_token = '' + prev_token + [
-                        '{',
-                        repeat[0],
-                        ',',
-                        isFinite(repeat[1]) ? repeat[1] : '',
-                        '}'
-                    ].join('');
-                    if ( !Syntax[ curr_token ] )
-                        Syntax[ curr_token ] = { type:'repeat', repeat:[repeat[0], repeat[1]], tokens:[prev_token] }
-                    sequence[sequence.length-1] = curr_token;
-                }
-                
-                else if ( '}' === c )
-                {
-                    // literal repeat end modifier, should be handled in previous case
-                    // added here just for completeness
-                    continue;
                 }
                 
                 else if ( '[' === c )
@@ -850,6 +815,94 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     continue;
                 }
                 
+                else if ( '/' === c )
+                {
+                    // literal regex token
+                    literal = get_delimited( t, c, '\\', true ); fl = '';
+                    if ( literal.length )
+                    {
+                        if ( t.pos < t.length && 'i' === t[CHAR](t.pos) ) { t.pos++; fl = 'i'; }
+                        curr_token = '/' + literal + '/' + fl;
+                        if ( !Lex[curr_token] ) Lex[curr_token] = { type:'simple', tokens:new_re("^("+literal+")",fl) };
+                        sequence.push( curr_token );
+                    }
+                }
+                
+                else if ( '*' === c || '+' === c || '?' === c )
+                {
+                    // repeat modifier, applies to token that comes before
+                    if ( sequence.length )
+                    {
+                        prev_token = sequence[sequence.length-1];
+                        curr_token = '' + prev_token + c;
+                        if ( !Syntax[ curr_token ] )
+                            Syntax[ curr_token ] = {
+                                type:'*' === c ? 'zeroOrMore' : ('+' === c ? 'oneOrMore' : 'zeroOrOne'),
+                                tokens:[prev_token]
+                            }
+                        sequence[sequence.length-1] = curr_token;
+                    }
+                    else token += c;
+                }
+                
+                else if ( '{' === c )
+                {
+                    // literal repeat modifier, applies to token that comes before
+                    if ( sequence.length )
+                    {
+                        repeat = get_delimited( t, '}', false );
+                        repeat = map( repeat.split( ',' ), trim );
+                        
+                        if ( !repeat[0].length ) repeat[0] = 0; // {,m} match 0 times or more
+                        else repeat[0] = parseInt(repeat[0], 10) || 0;// {n,m} match n times up to m times
+                        if ( 0 > repeat[0] ) repeat[0] = 0;
+                        
+                        if ( 2 > repeat.length ) repeat.push( repeat[0] ); // {n} match exactly n times
+                        else if ( !repeat[1].length ) repeat[1] = INF; // {n,} match n times or more (INF)
+                        else repeat[1] = parseInt(repeat[1], 10) || INF; // {n,m} match n times up to m times
+                        if ( 0 > repeat[1] ) repeat[1] = 0;
+                        
+                        prev_token = sequence[sequence.length-1];
+                        curr_token = '' + prev_token + [
+                            '{',
+                            repeat[0],
+                            ',',
+                            isFinite(repeat[1]) ? repeat[1] : '',
+                            '}'
+                        ].join('');
+                        if ( !Syntax[ curr_token ] )
+                            Syntax[ curr_token ] = { type:'repeat', repeat:[repeat[0], repeat[1]], tokens:[prev_token] }
+                        sequence[sequence.length-1] = curr_token;
+                    }
+                    else token += c;
+                }
+                
+                else if ( '}' === c )
+                {
+                    // literal repeat end modifier, should be handled in previous case
+                    // added here just for completeness
+                    //continue;
+                    token += c;
+                }
+                
+                else if ( '&' === c || '!' === c )
+                {
+                    // TODO
+                    // lookahead modifier, applies to token that comes before
+                    /*if ( sequence.length )
+                    {
+                        prev_token = sequence[sequence.length-1];
+                        curr_token = '' + prev_token + c;
+                        if ( !Syntax[ curr_token ] )
+                            Syntax[ curr_token ] = {
+                                type:'&' === c ? 'positiveLookahead' : 'negativeLookahead',
+                                tokens:[prev_token]
+                            }
+                        sequence[sequence.length-1] = curr_token;
+                    }
+                    else*/ token += c;
+                }
+                
                 else if ( '|' === c )
                 {
                     modifier = false;
@@ -866,7 +919,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     }
                     else
                     {
-                        // ??
+                        token += c;
                     }
                     sequence = [];
                 }
@@ -960,6 +1013,12 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 if ( !Lex[$T_SOF$] ) Lex[$T_SOF$] = { type:"simple", tokens:T_SOF };
                 sequence.push( $T_SOF$ );
             }
+            else if ( '^^1' === token )
+            {
+                // interpret as FNBL tokenizer
+                if ( !Lex[$T_FNBL$] ) Lex[$T_FNBL$] = { type:"simple", tokens:T_FNBL };
+                sequence.push( $T_FNBL$ );
+            }
             else if ( '^' === token )
             {
                 // interpret as SOL tokenizer
@@ -1022,10 +1081,15 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
 {
     var $token$ = null, $msg$ = null, $modifier$ = null, $type$, $tokens$, t, tt, token, combine;
     
-    if ( T_SOF === tokenID || T_SOL === tokenID || T_EOL === tokenID )
+    if ( T_SOF === tokenID || T_FNBL === tokenID || T_SOL === tokenID || T_EOL === tokenID )
     {
-        // SOF/SOL/EOL Token
-        return new tokenizer( tokenID, (T_SOF===tokenID?$T_SOF$:(T_SOL===tokenID?$T_SOL$:$T_EOL$)), tokenID, $msg$ );
+        // SOF/FNBL/SOL/EOL Token
+        return new tokenizer( tokenID, T_SOF === tokenID
+                                            ? $T_SOF$
+                                            : (T_FNBL === tokenID
+                                                ? $T_FBNL$
+                                                : (T_SOL === tokenID ? $T_SOL$ : $T_EOL$)
+                                            ), tokenID, $msg$ );
     }
     
     else if ( false === tokenID || 0/*T_EMPTY*/ === tokenID )
@@ -1071,18 +1135,11 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
     
     if ( T_SIMPLE & $type$ )
     {
-        if ( T_SOF === $tokens$ || T_SOL === $tokens$ || T_EOL === $tokens$ )
+        if ( T_SOF === $tokens$ || T_FNBL === $tokens$ || T_SOL === $tokens$ || T_EOL === $tokens$ || 
+            false === $tokens$ || 0/*T_EMPTY*/ === $tokens$ )
         {
-            // SOF/SOL/EOL Token
-            $token$ = new tokenizer( $tokens$, tokenID, $tokens$, $msg$ );
-            // pre-cache tokenizer to handle recursive calls to same tokenizer
-            cachedTokens[ tokenID ] = $token$; return $token$;
-        }
-        
-        else if ( false === $tokens$ || 0/*T_EMPTY*/ === $tokens$ )
-        {
-            // EMPTY Token
-            $token$ = new tokenizer( T_EMPTY, tokenID, 0, $msg$ );
+            // SOF/FNBL/SOL/EOL/EMPTY Token
+            $token$ = new tokenizer( $tokens$ || T_EMPTY , tokenID, $tokens$ || 0, $msg$ );
             // pre-cache tokenizer to handle recursive calls to same tokenizer
             cachedTokens[ tokenID ] = $token$; return $token$;
         }
@@ -1203,7 +1260,12 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
             
             else
             {
-                if ( (T_REPEATED & $type$) && (T_ARRAY & get_type( token.repeat )) )
+                if ( T_POSITIVE_LOOKAHEAD === $type$ || T_NEGATIVE_LOOKAHEAD === $type$ )
+                {
+                    // TODO
+                    $token$ = new tokenizer( $type$, tokenID, null, $msg$, $modifier$ );
+                }
+                else if ( (T_REPEATED & $type$) && (T_ARRAY & get_type( token.repeat )) )
                 {
                     $token$ = new tokenizer( T_REPEATED, tokenID, null, $msg$, $modifier$ );
                     $token$.min = token.repeat[0]; $token$.max = token.repeat[1];

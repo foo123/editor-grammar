@@ -12,6 +12,7 @@ function State( unique, s )
     {
         // clone
         self.line = s.line;
+        self.bline = s.bline;
         self.status = s.status;
         self.stack = s.stack.slice();
         self.block = s.block;
@@ -33,11 +34,12 @@ function State( unique, s )
             self.ctx = null;
             self.err = null;
         }
-        self.$eol$ = s.$eol$;
+        self.$eol$ = s.$eol$; self.$blank$ = s.$blank$;
     }
     else
     {
         self.line = -1;
+        self.bline = -1;
         self.status = s || 0;
         self.stack = [];
         self.block = null;
@@ -59,11 +61,11 @@ function State( unique, s )
             self.ctx = null;
             self.err = null;
         }
-        self.$eol$ = true;
+        self.$eol$ = true; self.$blank$ = true;
     }
     // make sure to generate a string which will cover most cases where state needs to be updated by the editor
     self.toString = function() {
-        return self.id+'_'+self.line+'_'+(self.block?self.block.name:'0');
+        return self.id+'_'+self.line+'_'+self.bline+'_'+(self.block?self.block.name:'0');
     };
 }
 
@@ -71,6 +73,7 @@ function state_dispose( state )
 {
     state.id = null;
     state.line = null;
+    state.bline = null;
     state.status = null;
     state.stack = null;
     state.block = null;
@@ -192,27 +195,35 @@ var Parser = Class({
             T = { }, $name$ = self.$n$, $type$ = self.$t$, $value$ = self.$v$, //$pos$ = 'pos',
             interleaved_tokens = grammar.$interleaved, tokens = grammar.$parser, 
             nTokens = tokens.length, niTokens = interleaved_tokens ? interleaved_tokens.length : 0,
-            tokenizer, action, token, type, err, stack, line, pos, i, ii, notfound
+            tokenizer, action, token, type, err, stack, line, pos, i, ii, notfound, just_space
         ;
         
         // state marks a new line
-        if ( state.$eol$ && stream.sol() ) { state.$eol$ = false; state.line++; }
+        if ( stream.sol() )
+        {
+            if ( state.$eol$ ) { state.$eol$ = false; state.line++; }
+            state.$blank$ = state.bline+1 === state.line;
+        }
         state.$actionerr$ = false;
         stack = state.stack; line = state.line; pos = stream.pos;
-        notfound = true; err = false; type = false;
+        notfound = true; err = false; type = false; just_space = false;
         
         // if EOL tokenizer is left on stack, pop it now
         if ( stack.length && T_EOL === stack[stack.length-1].type && stream.sol() ) stack.pop();
         
         // check for non-space tokenizer before parsing space
-        if ( (!stack.length || (T_NONSPACE !== stack[stack.length-1].type)) && stream.spc() ) notfound = false;
+        if ( (!stack.length || (T_NONSPACE !== stack[stack.length-1].type)) && stream.spc() )
+        {
+            notfound = false;
+            just_space = true;
+        }
         
         T[$name$] = null; T[$type$] = DEFAULT; T[$value$] = null;
         if ( notfound )
         {
             token = {
                 T:0, id:null, type:null,
-                match:null, str:'', pos:null
+                match:null, str:'', pos:null, block: null
             };
             
             i = 0;
@@ -239,9 +250,9 @@ var Parser = Class({
                     if ( tokenizer.status & REQUIRED_OR_ERROR )
                     {
                         // empty the stack of the syntax rule group of this tokenizer
-                        empty( stack, '$id', tokenizer.$id );
+                        empty( stack, tokenizer.$id );
                         // skip this
-                        stream.nxt( true ) || stream.spc( );
+                        if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
                         // generate error
                         err = true; notfound = false; break;
                     }
@@ -285,7 +296,7 @@ var Parser = Class({
         }
         
         
-        // unknown, bypass, next default char/token
+        // unknown, bypass, next char/token
         if ( notfound )  stream.nxt( 1/*true*/ ) /*|| stream.spc( )*/;
         
         T[$value$] = stream.cur( 1 );
@@ -306,6 +317,9 @@ var Parser = Class({
         }
         T[$type$] = type;
         state.$eol$ = stream.eol();
+        state.$blank$ = state.$blank$ && (just_space || state.$eol$);
+        // update num of blank lines at start of file
+        if ( state.$eol$ && state.$blank$ ) state.bline = state.line;
         
         return T;
     }
@@ -313,7 +327,7 @@ var Parser = Class({
     ,tokenize: function( stream, state, row ) {
         var self = this, tokens = [];
         //state.line = row || 0;
-        if ( stream.eol() ) { state.line++; /*state.$eol$ = true;*/ }
+        if ( stream.eol() ) { state.line++; if ( state.$blank$ ) state.bline++; }
         else while ( !stream.eol() ) tokens.push( self.token( stream, state ) );
         return tokens;
     }
@@ -344,7 +358,7 @@ var Parser = Class({
             iterate(function( i ) {
                 var stream = Stream( lines[i] );
                 //state.line = i;
-                if ( stream.eol() ) { state.line++; state.$eol$ = true; }
+                if ( stream.eol() ) { state.line++; if ( state.$blank$ ) state.bline++; }
                 else while ( !stream.eol() ) self.token( stream, state );
             }, 0, l-1);
         

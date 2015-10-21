@@ -291,30 +291,17 @@ function has_prefix( s, p )
     );
 }
 
-/*function peek( stack, index )
+function push_at( stack, pos, token )
 {
-    index = 2 > arguments.length ? -1 : index;
-    if ( stack.length )
-    {
-        if ( (0 > index) && (0 <= stack.length+index) )
-            return stack[ stack.length + index ];
-        else if ( 0 <= index && index < stack.length )
-            return stack[ index ];
-    }
-}*/
-
-function push_at( stack, pos, token, $id, id )
-{
-    if ( $id && id ) token[$id] = id;
     if ( pos < stack.length ) stack.splice( pos, 0, token );
     else stack.push( token );
     return stack;
 }
 
-function empty( stack, $id, id )
+function empty( stack, $id )
 {
-    if ( $id && id )
-        while ( stack.length && stack[stack.length-1] && stack[stack.length-1][$id] === id ) stack.pop();
+    if ( $id )
+        while ( stack.length && stack[stack.length-1] && stack[stack.length-1].$id === $id ) stack.pop();
     else
         stack.length = 0;
     return stack;
