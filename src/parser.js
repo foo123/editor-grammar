@@ -21,7 +21,6 @@ function State( unique, s )
         {
             self.queu = s.queu;
             self.symb = s.symb;
-            self.scop = s.scop;
             self.ctx = s.ctx;
             self.err = s.err;
         }
@@ -30,7 +29,6 @@ function State( unique, s )
         {
             self.queu = null;
             self.symb = null;
-            self.scop = null;
             self.ctx = null;
             self.err = null;
         }
@@ -48,7 +46,6 @@ function State( unique, s )
         {
             self.queu = [];
             self.symb = {};
-            self.scop = {};
             self.ctx = [];
             self.err = {};
         }
@@ -57,7 +54,6 @@ function State( unique, s )
         {
             self.queu = null;
             self.symb = null;
-            self.scop = null;
             self.ctx = null;
             self.err = null;
         }
@@ -79,7 +75,6 @@ function state_dispose( state )
     state.block = null;
     state.queu = null;
     state.symb = null;
-    state.scop = null;
     state.ctx = null;
     state.err = null;
 }
@@ -195,7 +190,8 @@ var Parser = Class({
             T = { }, $name$ = self.$n$, $type$ = self.$t$, $value$ = self.$v$, //$pos$ = 'pos',
             interleaved_tokens = grammar.$interleaved, tokens = grammar.$parser, 
             nTokens = tokens.length, niTokens = interleaved_tokens ? interleaved_tokens.length : 0,
-            tokenizer, action, token, type, err, stack, line, pos, i, ii, notfound, just_space
+            tokenizer, action, token, stack, line, pos, i, ii, stream_pos, stack_pos,
+            type, err, notfound, just_space, block_in_progress
         ;
         
         // state marks a new line
@@ -206,13 +202,16 @@ var Parser = Class({
         }
         state.$actionerr$ = false;
         stack = state.stack; line = state.line; pos = stream.pos;
-        notfound = true; err = false; type = false; just_space = false;
+        type = false; notfound = true; err = false; just_space = false;
+        block_in_progress = state.block ? state.block.name : undef;
         
         // if EOL tokenizer is left on stack, pop it now
         if ( stack.length && T_EOL === stack[stack.length-1].type && stream.sol() ) stack.pop();
         
-        // check for non-space tokenizer before parsing space
-        if ( (!stack.length || (T_NONSPACE !== stack[stack.length-1].type)) && stream.spc() )
+        // check for non-space tokenizer or partial-block-in-progress, before parsing any space/empty
+        if ( (!stack.length 
+            || (T_NONSPACE !== stack[stack.length-1].type && block_in_progress !== stack[stack.length-1].name)) 
+            && stream.spc() )
         {
             notfound = false;
             just_space = true;
@@ -223,13 +222,16 @@ var Parser = Class({
         {
             token = {
                 T:0, id:null, type:null,
-                match:null, str:'', pos:null, block: null
+                match:null, str:'',
+                pos:null, block: null
             };
             
             i = 0;
             while ( notfound && (stack.length || i<nTokens) && !stream.eol() )
             {
-                if ( niTokens )
+                stream_pos = stream.pos; stack_pos = stack.length;
+                // dont interleave tokens if partial block is in progress
+                if ( niTokens && !state.block )
                 {
                     for (ii=0; ii<niTokens; ii++)
                     {
@@ -240,6 +242,8 @@ var Parser = Class({
                     if ( !notfound ) break;
                 }
                 
+                // seems stack and/or ngrams can ran out while inside the loop !!  ?????
+                if ( !stack.length && i>=nTokens) break;
                 tokenizer = stack.length ? stack.pop() : tokens[i++];
                 type = tokenize( tokenizer, stream, state, token );
                 
@@ -257,10 +261,12 @@ var Parser = Class({
                         err = true; notfound = false; break;
                     }
                     // optional
-                    else
+                    /*else
                     {
+                        if ( stream.pos > stream_pos ) stream.bck( stream_pos );
+                        if ( stack.length > stack_pos ) stack.length = stack_pos;
                         continue;
-                    }
+                    }*/
                 }
                 // found token
                 else
@@ -275,7 +281,7 @@ var Parser = Class({
                             if ( action.status & ERROR ) state.$actionerr$ = true;
                         }
                     }
-                    // partial block, apply any action(s) following it
+                    // partial block, apply maybe any action(s) following it
                     else if ( stack.length > 1 && stream.eol() &&  
                         (T_BLOCK & stack[stack.length-1].type) && state.block &&
                         state.block.name === stack[stack.length-1].name 
@@ -318,7 +324,7 @@ var Parser = Class({
         T[$type$] = type;
         state.$eol$ = stream.eol();
         state.$blank$ = state.$blank$ && (just_space || state.$eol$);
-        // update num of blank lines at start of file
+        // update count of blank lines at start of file
         if ( state.$eol$ && state.$blank$ ) state.bline = state.line;
         
         return T;

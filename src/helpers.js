@@ -2,7 +2,9 @@
 //
 // tokenizer helpers
 var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g,
-    peg_bnf_special_re = /^([.!&\[\]{}()*+?\/|'"]|\s)/;
+    peg_bnf_special_re = /^([.!&\[\]{}()*+?\/|'"]|\s)/,
+    default_combine_delimiter = "\\b", 
+    combine_delimiter = "(\\s|\\W|$)" /* more flexible than \\b */;
 
 function esc_re( s )
 {
@@ -130,6 +132,7 @@ function get_combined_re( tokens, boundary, case_insensitive )
 {
     var b = "", combined;
     if ( T_STR & get_type(boundary) ) b = boundary;
+    else b = combine_delimiter;
     combined = map( tokens.sort( by_length ), esc_re ).join( "|" );
     return [ new_re("^(" + combined + ")"+b, case_insensitive ? "i": ""), 1 ];
 }
@@ -198,7 +201,7 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
             }
         }
         
-        if ( is_char_list && ( !combined || !( T_STR & get_type(combined) ) ) )
+        if ( is_char_list && ( !combined /*|| !( T_STR & get_type(combined) )*/ ) )
         {
             tmp = tmp.slice().join('');
             tmp.isCharList = 1;
@@ -545,7 +548,7 @@ function preprocess_grammar( grammar )
         {
             tok.autocomplete = !!tok.autocomplete;
             tok.meta = tok.autocomplete && (T_STR & get_type(tok.meta)) ? tok.meta : null;
-            tok.combine = !tok[HAS]('combine') ? "\\b" : tok.combine;
+            tok.combine = !tok[HAS]('combine') ? true : tok.combine;
             tok.ci = !!(tok.caseInsesitive||tok.ci);
         }
     }
@@ -681,6 +684,28 @@ function get_backreference( token, Lex, Syntax, only_key )
     return only_key ? token : Lex[token] || Syntax[token] || token;
 }
 
+var trailing_repeat_re = /[*+]$/;
+function peg_simplify( expression, is_alternation_else_sequence )
+{
+    return expression.length > 1
+    ? iterate(is_alternation_else_sequence
+        // simplify e.g x | x .. | x => x etc.. in alternation
+        ? function( i, simplified ){
+            var current = simplified[simplified.length-1], next = expression[i];
+            if ( current === next ) { /* skip*/ }
+            else simplified.push( next );
+        }
+        // simplify e.g x x* => x+, x*x* => x* or x+x+ => x+ etc.. in sequence
+        : function( i, simplified ){
+            var current = simplified[simplified.length-1], next = expression[i];
+            //if ( current+'*' === next ) { simplified[simplified.length-1] = current+'+'; }
+            /*else*/ if ( trailing_repeat_re.test(next) && trailing_repeat_re.test(current) && current === next ) { /* skip*/ }
+            else simplified.push( next );
+        }, 1, expression.length-1, [expression[0]]
+    )
+    : expression;
+}
+
 function parse_peg_bnf_notation( tok, Lex, Syntax )
 {
     var alternation, sequence, token, literal, repeat, entry, prev_entry,
@@ -797,6 +822,8 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 else if ( '[' === c )
                 {
                     // start of character select
+                    /*if ( !token.length )
+                    {*/
                     literal = get_delimited( t, ']', '\\', true );
                     curr_token = '[' + literal + ']';
                     if ( !Lex[curr_token] )
@@ -806,18 +833,23 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                             //                                          negative match,      else   positive match
                         /*literal.split('')*/};
                     sequence.push( curr_token );
+                    /*}
+                    else token += c;*/
                 }
                 
                 else if ( ']' === c )
                 {
                     // end of character select, should be handled in previous case
                     // added here just for completeness
+                    token += c;
                     continue;
                 }
                 
                 else if ( '/' === c )
                 {
                     // literal regex token
+                    /*if ( !token.length )
+                    {*/
                     literal = get_delimited( t, c, '\\', true ); fl = '';
                     if ( literal.length )
                     {
@@ -826,6 +858,8 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                         if ( !Lex[curr_token] ) Lex[curr_token] = { type:'simple', tokens:new_re("^("+literal+")",fl) };
                         sequence.push( curr_token );
                     }
+                    /*}
+                    else token += c;*/
                 }
                 
                 else if ( '*' === c || '+' === c || '?' === c )
@@ -881,8 +915,8 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 {
                     // literal repeat end modifier, should be handled in previous case
                     // added here just for completeness
-                    //continue;
                     token += c;
+                    continue;
                 }
                 
                 else if ( '&' === c || '!' === c )
@@ -907,6 +941,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 {
                     modifier = false;
                     // alternation
+                    sequence = peg_simplify( sequence );
                     if ( sequence.length > 1 )
                     {
                         curr_token = '' + sequence.join( " " );
@@ -934,6 +969,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 else if ( ')' === c )
                 {
                     // end of grouped sub-sequence
+                    sequence = peg_simplify( sequence );
                     if ( sequence.length > 1 )
                     {
                         curr_token = '' + sequence.join( " " );
@@ -946,6 +982,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     }
                     sequence = [];
                     
+                    alternation = peg_simplify( alternation, 1 );
                     if ( alternation.length > 1 )
                     {
                         curr_token = '' + alternation.join( " | " );
@@ -1039,6 +1076,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
         }
         token = '';
         
+        sequence = peg_simplify( sequence );
         if ( sequence.length > 1 )
         {
             curr_token = '' + sequence.join( " " );
@@ -1055,6 +1093,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
         }
         sequence = [];
         
+        alternation = peg_simplify( alternation, 1 );
         if ( alternation.length > 1 )
         {
             curr_token = '' + alternation.join( " | " );
@@ -1206,8 +1245,8 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
         {
             if ( token.autocomplete ) get_autocomplete( token, tokenID, keywords );
             
-            // combine by default if possible using word-boundary delimiter
-            combine = !token[HAS]('combine') ? "\\b" : token.combine;
+            // combine by default if possible using default word-boundary delimiter
+            combine = !token[HAS]('combine') ? true : token.combine;
             $token$ = new tokenizer( T_SIMPLE, tokenID,
                         get_compositematcher( tokenID, $tokens$.slice(), RegExpID, combine,
                         !!(token.caseInsensitive||token.ci), cachedRegexes, cachedMatchers ), 

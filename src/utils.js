@@ -300,10 +300,24 @@ function push_at( stack, pos, token )
 
 function empty( stack, $id )
 {
-    if ( $id )
-        while ( stack.length && stack[stack.length-1] && stack[stack.length-1].$id === $id ) stack.pop();
-    else
-        stack.length = 0;
+    // http://dvolvr.davidwaterston.com/2013/06/09/restating-the-obvious-the-fastest-way-to-truncate-an-array-in-javascript/
+    var count = 0, total = stack.length;
+    if ( true === $id )
+    {
+        // empty whole stack
+        stack.length =  0;
+    }
+    else if ( $id )
+    {
+        // empty only entries associated to $id
+        while ( count < total && /*stack[total-count-1] &&*/ stack[total-count-1].$id === $id ) count++;
+        if ( count ) stack.length =  total-count;
+    }
+    /*else if ( count )
+    {
+        // just pop one
+        stack.length =  count-1;
+    }*/
     return stack;
 }
 

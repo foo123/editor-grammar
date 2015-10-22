@@ -189,6 +189,8 @@ function error_( state, l1, c1, l2, c2, t, err )
 
 function tokenize( t, stream, state, token )
 {
+    //console.log( t );
+    if ( !t ) return false;
     var T = t.type, 
         t_ = T_COMPOSITE & T
         ? t_composite
@@ -204,7 +206,7 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb, scop, ctx,
+    t, t0, ns, msg, queu, symb, ctx,
     l1, c1, l2, c2, in_ctx, err, t_str, is_block,
     no_errors = !(state.status & ERRORS);
 
@@ -258,7 +260,7 @@ function t_action( a, stream, state, token )
 
     else if ( A_CTXSTART === action )
     {
-        ctx.unshift({symb:{},scop:{},queu:[]});
+        ctx.unshift({symb:{},queu:[]});
     }
 
     else if ( A_UNIQUE === action )
@@ -583,13 +585,14 @@ function t_composite( t, stream, state, token )
     var self = t, type = self.type, name = self.name, tokens = self.token, n = tokens.length,
         tokenizer, style, modifier = self.modifier, found, min, max,
         tokens_required, tokens_err, stream_pos, stack_pos,
-        i, tt, stack, err, $id, match_all;
+        i, i0, tt, stack, err, $id, is_sequence;
 
     self.status &= CLEAR_ERROR;
     self.$msg = self.msg || null;
 
     stack = state.stack;
-    stream_pos = stream.pos; stack_pos = stack.length;
+    stream_pos = stream.pos;
+    stack_pos = stack.length;
 
     tokens_required = 0; tokens_err = 0;
     $id = self.$id || get_id( );
@@ -617,8 +620,8 @@ function t_composite( t, stream, state, token )
             else if ( tokenizer.status & ERROR )
             {
                 tokens_err++;
-                stream.bck( stream_pos );
-                stack.length = stack_pos;
+                if ( stream.pos > stream_pos ) stream.bck( stream_pos );
+                if ( stack.length > stack_pos ) stack.length = stack_pos;
             }
         }
         
@@ -632,18 +635,22 @@ function t_composite( t, stream, state, token )
 
     else if ( T_SEQUENCE_OR_NGRAM & type )
     {
-        match_all = !!(type & T_SEQUENCE);
-        if ( match_all ) self.status |= REQUIRED;
+        is_sequence = !!(type & T_SEQUENCE);
+        if ( is_sequence ) self.status |= REQUIRED;
         else self.status &= CLEAR_REQUIRED;
-        tokenizer = t_clone( tokens[ 0 ], match_all, modifier, $id );
+        i0 = 0;
+        do {
+        tokenizer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
         style = tokenize( tokenizer, stream, state, token );
+        // bypass failed but optional tokens in the sequence and get to then next ones
+        } while (is_sequence && i0 < n && false === style && !(tokenizer.status & REQUIRED_OR_ERROR));
         
         if ( false !== style )
         {
             // not empty token
             if ( true !== style || T_EMPTY !== tokenizer.type )
             {
-                for (i=n-1; i>0; i--)
+                for (i=n-1; i>=i0; i--)
                     push_at( stack, stack_pos+n-i-1, t_clone( tokens[ i ], 1, modifier, $id ) );
             }
                 
@@ -651,12 +658,12 @@ function t_composite( t, stream, state, token )
         }
         else if ( tokenizer.status & ERROR /*&& tokenizer.REQ*/ )
         {
-            if ( match_all ) self.status |= ERROR;
+            if ( is_sequence ) self.status |= ERROR;
             else self.status &= CLEAR_ERROR;
-            stream.bck( stream_pos );
-            stack.length = stack_pos;
+            if ( stream.pos > stream_pos ) stream.bck( stream_pos );
+            if ( stack.length > stack_pos ) stack.length = stack_pos;
         }
-        else if ( match_all && (tokenizer.status & REQUIRED) )
+        else if ( is_sequence && (tokenizer.status & REQUIRED) )
         {
             self.status |= ERROR;
         }
@@ -706,7 +713,11 @@ function t_composite( t, stream, state, token )
                 tokens_required++;
                 err.push( t_err( tokenizer ) );
             }
-            if ( tokenizer.status & ERROR ) { stream.bck( stream_pos ); stack.length = stack_pos; }
+            if ( tokenizer.status & ERROR )
+            {
+                if ( stream.pos > stream_pos ) stream.bck( stream_pos );
+                if ( stack.length > stack_pos ) stack.length = stack_pos;
+            }
         }
         
         if ( found < min ) self.status |= REQUIRED;

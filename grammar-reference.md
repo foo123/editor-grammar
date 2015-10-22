@@ -287,7 +287,7 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
 
 
 * `<start-of-file>` token (modeled as `^^`, see below)
-* `<fist-non-blank-line>` token (modeled as `^^1`, see below)
+* `<first-non-blank-line>` token (modeled as `^^1`, see below)
 * `<start-of-line>` token (modeled as `^`, see below)
 * `<end-of-line>` token (modeled as `$`, see below)
 * `<up-to-line-end>` token (modeled as `null`, see above, `block` tokens)
