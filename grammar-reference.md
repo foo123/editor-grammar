@@ -484,15 +484,11 @@ In order for a (grammar) specification for (programming) language highlight to b
 For example (see above): 
 
 
-* `<start-of-file>` token
-* `<first-non-blank-line>` token
-* `<start-of-line>` token
-* `<end-of-line>` token
-* `<up-to-line-end>` token
-* `<non-space>` token
-* `<indentation>` token
-* `<de-indentation>` token
-
+* `<start-of-file>`, `<start-of-line>`, `<end-of-line>` token
+* `<first-non-blank-line>`, `<up-to-line-end>` token
+* `<non-space>`, `<indentation>`, `<de-indentation>` token
+* `<block>`, `<delimited>` token (e.g in the sense that `comments`, `strings`, `heredocs`,.. are delimited, block tokens)
+* and so on..
     
     
 
@@ -505,6 +501,7 @@ For example (see above):
 * handle arbitrary, user-defined, code `(de-)indentation` via `indent action` token
 * handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token
 * handle arbitrary, user-defined, `local/global/scoped` relations via `scope action` token
+* and so on..
 
 
 The difference between `<indentation>` token and `<indent>` action token (although related) is that the `indentation` token **recognizes** indentations and indentation changes (that may signal a code block, for example like braces do), while an `indent` action token **creates** dynamic indentation (e.g by inserting `indentation` tokens).
