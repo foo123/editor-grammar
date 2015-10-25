@@ -2,9 +2,51 @@
 //
 // tokenizer helpers
 var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g,
+    html_special_re = /[&"'<>]/g,
     peg_bnf_special_re = /^([.!&\[\]{}()*+?\/|'"]|\s)/,
     default_combine_delimiter = "\\b", 
     combine_delimiter = "(\\s|\\W|$)" /* more flexible than \\b */;
+
+/*
+//html_ispecial_re = /&#(\d+);/g,
+function html_unescaper( m, c )
+{
+    return String.fromCharCode(parseInt(c,10));
+}
+function unesc_html( s )
+{
+    return s.replace(html_ispecial_re, html_unescaper);
+}
+*/
+
+function html_escaper_entities( c )
+{
+    return '&' === c
+        ? '&amp;'
+        :(
+        '<' === c
+        ? '&lt;'
+        : (
+        '>' === c
+        ? '&gt;'
+        : (
+        '"' === c
+        ? '&quot;'
+        : '&apos;'
+        )))
+    ;
+}
+
+function html_escaper( c )
+{
+    return "&#" + c.charCodeAt(0) + ";";
+}
+
+function esc_html( s, entities )
+{
+    return s.replace(html_special_re, entities ? html_escaper_entities : html_escaper);
+}
+
 
 function esc_re( s )
 {
@@ -132,7 +174,7 @@ function get_combined_re( tokens, boundary, case_insensitive )
 {
     var b = "", combined;
     if ( T_STR & get_type(boundary) ) b = boundary;
-    else b = combine_delimiter;
+    else if ( !!boundary ) b = combine_delimiter;
     combined = map( tokens.sort( by_length ), esc_re ).join( "|" );
     return [ new_re("^(" + combined + ")"+b, case_insensitive ? "i": ""), 1 ];
 }
@@ -166,7 +208,7 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
     
     var tmp, i, l, l2, array_of_arrays = 0, 
         has_regexs = 0, is_char_list = 1, 
-        T1, T2, mtcher;
+        T1, T2, mtcher, combine = T_STR & get_type(combined) ? true : !!combined;
     
     tmp = make_array( tokens ); l = tmp.length;
     
@@ -201,13 +243,13 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
             }
         }
         
-        if ( is_char_list && ( !combined /*|| !( T_STR & get_type(combined) )*/ ) )
+        if ( is_char_list && !combine )
         {
             tmp = tmp.slice().join('');
             tmp.isCharList = 1;
             mtcher = get_simplematcher( name, tmp, 0, cachedMatchers );
         }
-        else if ( combined && !(array_of_arrays || has_regexs) )
+        else if ( combine && !(array_of_arrays || has_regexs) )
         {   
             mtcher = get_simplematcher( name, get_combined_re( tmp, combined, caseInsensitive ), 0, cachedMatchers );
         }

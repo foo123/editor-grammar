@@ -143,6 +143,18 @@ function tokenizer( type, name, token, msg, modifier )
     self.$id = null;
 }
 
+function s_token( )
+{
+    var t = this;
+    t.T = 0;
+    t.id = null;
+    t.type = null;
+    t.match = null;
+    t.str = '';
+    t.pos = null;
+    t.block =  null;
+}
+
 function t_clone( t, required, modifier, $id )
 {
     var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier );
@@ -243,7 +255,7 @@ function t_action( a, stream, state, token )
         return false;
     }
 
-    else if ( A_INDENT === action )
+    /*else if ( A_INDENT === action )
     {
         // TODO
     }
@@ -253,6 +265,16 @@ function t_action( a, stream, state, token )
         // TODO
     }
 
+    else if ( A_FOLDSTART === action )
+    {
+        // TODO
+    }
+
+    else if ( A_FOLDEND === action )
+    {
+        // TODO
+    }*/
+
     else if ( A_CTXEND === action )
     {
         if ( ctx.length ) ctx.shift();
@@ -261,35 +283,6 @@ function t_action( a, stream, state, token )
     else if ( A_CTXSTART === action )
     {
         ctx.unshift({symb:{},queu:[]});
-    }
-
-    else if ( A_UNIQUE === action )
-    {
-        if ( in_ctx )
-        {
-            if ( ctx.length ) symb = ctx[0].symb;
-            else return true;
-        }
-        t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
-        if ( case_insensitive ) t0 = t0[LOWER]();
-        if ( !symb[HAS](ns) ) symb[ns] = { };
-        if ( symb[ns][HAS](t0) )
-        {
-            // duplicate
-            self.$msg = msg
-                ? group_replace( msg, t0, true )
-                : 'Duplicate "'+t0+'"';
-            err = t_err( self );
-            error_( state, symb[ns][t0][0], symb[ns][t0][1], symb[ns][t0][2], symb[ns][t0][3], self, err );
-            error_( state, l1, c1, l2, c2, self, err );
-            self.status |= ERROR;
-            return false;
-        }
-        else
-        {
-            symb[ns][t0] = [l1, c1, l2, c2];
-        }
     }
 
     else if ( A_MCHEND === action )
@@ -349,6 +342,35 @@ function t_action( a, stream, state, token )
         t = group_replace( t, t_str );
         if ( case_insensitive ) t = t[LOWER]();
         queu.unshift( [t, l1, c1, l2, c2] );
+    }
+
+    else if ( A_UNIQUE === action )
+    {
+        if ( in_ctx )
+        {
+            if ( ctx.length ) symb = ctx[0].symb;
+            else return true;
+        }
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        if ( !symb[HAS](ns) ) symb[ns] = { };
+        if ( symb[ns][HAS](t0) )
+        {
+            // duplicate
+            self.$msg = msg
+                ? group_replace( msg, t0, true )
+                : 'Duplicate "'+t0+'"';
+            err = t_err( self );
+            error_( state, symb[ns][t0][0], symb[ns][t0][1], symb[ns][t0][2], symb[ns][t0][3], self, err );
+            error_( state, l1, c1, l2, c2, self, err );
+            self.status |= ERROR;
+            return false;
+        }
+        else
+        {
+            symb[ns][t0] = [l1, c1, l2, c2];
+        }
     }
     return true;
 }
@@ -642,8 +664,8 @@ function t_composite( t, stream, state, token )
         do {
         tokenizer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
         style = tokenize( tokenizer, stream, state, token );
-        // bypass failed but optional tokens in the sequence and get to then next ones
-        } while (is_sequence && i0 < n && false === style && !(tokenizer.status & REQUIRED_OR_ERROR));
+        // bypass failed but optional tokens in the sequence and get to the next ones
+        } while (/*is_sequence &&*/ i0 < n && false === style && !(tokenizer.status & REQUIRED_OR_ERROR));
         
         if ( false !== style )
         {

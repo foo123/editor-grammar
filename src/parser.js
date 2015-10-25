@@ -197,7 +197,12 @@ var Parser = Class({
         // state marks a new line
         if ( stream.sol() )
         {
-            if ( state.$eol$ ) { state.$eol$ = false; state.line++; }
+            if ( state.$eol$ )
+            {
+                // update count of blank lines at start of file
+                if ( state.$blank$ ) state.bline = state.line;
+                state.$eol$ = false; state.line++;
+            }
             state.$blank$ = state.bline+1 === state.line;
         }
         state.$actionerr$ = false;
@@ -220,11 +225,7 @@ var Parser = Class({
         T[$name$] = null; T[$type$] = DEFAULT; T[$value$] = null;
         if ( notfound )
         {
-            token = {
-                T:0, id:null, type:null,
-                match:null, str:'',
-                pos:null, block: null
-            };
+            token = new s_token( );
             
             i = 0;
             while ( notfound && (stack.length || i<nTokens) && !stream.eol() )
@@ -254,7 +255,7 @@ var Parser = Class({
                     if ( tokenizer.status & REQUIRED_OR_ERROR )
                     {
                         // empty the stack of the syntax rule group of this tokenizer
-                        empty( stack, tokenizer.$id );
+                        empty( stack, tokenizer.$id /*|| true*/ );
                         // skip this
                         if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
                         // generate error
@@ -325,7 +326,7 @@ var Parser = Class({
         state.$eol$ = stream.eol();
         state.$blank$ = state.$blank$ && (just_space || state.$eol$);
         // update count of blank lines at start of file
-        if ( state.$eol$ && state.$blank$ ) state.bline = state.line;
+        //if ( state.$eol$ && state.$blank$ ) state.bline = state.line;
         
         return T;
     }
