@@ -493,6 +493,11 @@ For example (see above):
 * `<indentation>` token
 * `<de-indentation>` token
 
+    
+    
+
+* handle arbitrary, user-defined, toggle comments and keyword autocompletion functionality (achieved by semanticaly annotating language `comments` and `keywords`)
+* handle arbitrary, user-defined, lint-like syntax-annotation functionality (achieved by modeling language `syntax` analysis except strictly `lexical` analysis, in-context)
 * handle arbitrary, user-defined, dynamic contexts via `context action` token
 * handle arbitrary, user-defined, unique identifiers via `unique action` token
 * handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) via `match action` token
