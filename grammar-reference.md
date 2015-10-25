@@ -15,6 +15,7 @@
 * [Syntax Model **(optional)**](#syntax-model)
     1. [Syntax PEG/BNF-like notations **(new)**](#syntax-pegbnf-like-notations)
 * [Parser](#parser)
+* [Modularity and Future Directions](#modularity-and-future-directions)
 
 
 
@@ -454,3 +455,51 @@ Specificaly:
 
 
 * a syntax token used in the `parser`, which is enclosed in brackets `[..]`, i.e as an `array`, is interpreted as an `n-gram`-type token (see syntax part, above). This is used for *convenience ans succintness of notation*, instead of creating  separate `n-gram` token(s), for use in the `parser` part
+
+
+###Modularity and Future Directions
+
+The model envisioned for modular highlighting is shown below:
+
+![Specification - Analyser - Renderer Model](spec-analyser-renderer-diagram.png)
+
+
+1. User specifies a `specification` (a `grammar` model) for a language
+2. The specification along with the source code (to be highlighted) is passed to the `analyser` (`parser`), which uses the specification to analyse the code and extract data (see below)
+3. The analysed code data and the source code are passed to the `renderer` (`editor`, e.g `codemirror`, `ace`,..) which renders the code and interacts with the user
+
+More or less this model is used now by highlight editors (e.g `codemirror`, `ace`, ..) however it is not modular.
+The new `specification-analyser-renderer model` has the following features / advantages:
+
+1. Specification is at the same time both **concise** and **detailed, self-contained** (this is achieved by modeling all necessary features of a language in a symbolic way, see below).
+2. Specifications can be **extended / merged / combined** to **construct new specifications** for variations, dialects, composite languages, with minimum effort (this is achieved by the appropriate format for a specification and how/what it models, see below).
+3. The model is **based on interfaces** for/between analyser and renderer, while implementations can vary as needed. This **decouples highlighting specifications from underlying implementations** and differences between platforms,editors,languages and so on..
+4. Optionaly, a specification can be **directly transformed into hard code** (highlight mode source code for a language) and be used directly (in place of analyser) without re-doing the first 2 stages (specification - analyser).
+
+
+The format for a specification should be such that is widely supported, is textual or also has a equivalent strictly-textual representation, is concise, and enables compositions operations. `JSON` is such a format (and ubiquitous in javascript-based projects) and is the format used by the `grammar` (`specification`).
+
+In order for a (grammar) specification for (programming) language highlight to be detailed and self-contained (to be re-usable and flexible under the most general conditions), and also concise, it should model all available types of tokens/actions which play a part in the code and the way it is highlighted (usualy not modeled by other approaches or other grammar specifications).
+
+For example (see above): 
+
+
+* `<start-of-file>` token
+* `<first-non-blank-line>` token
+* `<start-of-line>` token
+* `<end-of-line>` token
+* `<up-to-line-end>` token
+* `<non-space>` token
+* `<indentation>` token
+* `<de-indentation>` token
+
+* handle arbitrary, user-defined, dynamic contexts via `context action` token
+* handle arbitrary, user-defined, unique identifiers via `unique action` token
+* handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) via `match action` token
+* handle arbitrary, user-defined, code `folding` via `fold action` token
+* handle arbitrary, user-defined, code `(de-)indentation` via `indent action` token
+* handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token
+* handle arbitrary, user-defined, `local/global/scoped` relations via `scope action` token
+
+
+The difference between `<indentation>` token and `<indent>` action token (although related) is that the `indentation` token **recognizes** indentations and indentation changes (that may signal a code block, for example like braces do), while an `indent` action token **creates** dynamic indentation (e.g by inserting `indentation` tokens).
