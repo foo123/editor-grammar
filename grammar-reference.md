@@ -51,7 +51,7 @@ example:
 
 
 
-Generic Code Folding is supported (by generic folders implementations). Add a `fold` type in: Grammar.Extra.fold` option.
+Generic Code Folding is supported (by generic folders implementations). Add a `fold` type in: `Grammar.Extra.fold` option.
 Generic Fold Types supported:
 
 * `"brace"` / `"cstyle"` , folds on braces (i.e `{}`) and brackets (i.e `[]`)
