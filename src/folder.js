@@ -8,27 +8,6 @@ function Type( TYPE, positive )
     : function( type ) { return TYPE.test( type ); };
 }
 
-// Counts the column offset in a string, taking tabs into account.
-// Used mostly to find indentation.
-// adapted from codemirror countColumn
-function count_column( string, end, tabSize, startIndex, startValue )
-{
-    var i, n, nextTab;
-    if ( null == end )
-    {
-        end = string.search(Stream.$NONSPC$);
-        if ( -1 == end ) end = string.length;
-    }
-    for (i=startIndex||0,n=startValue||0 ;;)
-    {
-        nextTab = string.indexOf("\t", i);
-        if ( nextTab < 0 || nextTab >= end ) return n + (end - i);
-        n += nextTab - i;
-        n += tabSize - (n % tabSize);
-        i = nextTab + 1;
-    }
-}
-
 function next_tag( iter, T, M, L, R, S )
 {
     for (;;)
@@ -136,14 +115,13 @@ var Folder = {
         
         return function( iter ) {
             var first_line, first_indentation, cur_line, cur_indentation,
-                start_pos, end_pos, last_line_in_fold, i, end,
-                row = iter.row, col = iter.col;
+                start_line = iter.row, start_pos, last_line_in_fold, end_pos, i, end;
             
-            first_line = iter.line( );
+            first_line = iter.line( start_line );
             if ( !NOTEMPTY.test( first_line ) ) return;
             first_indentation = iter.indentation( first_line );
             last_line_in_fold = null; start_pos = first_line.length;
-            for (i=row+1,end=iter.last( ); i<=end; ++i)
+            for (i=start_line+1,end=iter.last( ); i<=end; ++i)
             {
                 cur_line = iter.line( i ); cur_indentation = iter.indentation( cur_line );
                 if ( cur_indentation > first_indentation )
@@ -164,7 +142,7 @@ var Folder = {
                 }
             }
             // return a range
-            if ( last_line_in_fold ) return [row, start_pos, last_line_in_fold, end_pos];
+            if ( last_line_in_fold ) return [start_line, start_pos, last_line_in_fold, end_pos];
         };
     }
 
@@ -226,7 +204,7 @@ var Folder = {
     ,MarkedUp: function( T, L, R, S, M ) {
         T = T || Type(/\btag\b/);
         L = L || "<"; R = R || ">"; S = S || "/";
-        M = M || new_re(L+"("+S+"?)([a-zA-Z_][a-zA-Z0-9_\\-:]*)","g");
+        M = M || new_re( L + "(" + S + "?)([a-zA-Z_\\-][a-zA-Z0-9_\\-:]*)", "g" );
 
         return function( iter ) {
             iter.col = 0; iter.min = iter.first( ); iter.max = iter.last( );

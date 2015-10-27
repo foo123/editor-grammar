@@ -164,6 +164,27 @@ Stream.$NONSPC$ = /[^\s\u00a0]/;
 Stream.$NOTEMPTY$ = /\S/;
 Stream.$SPACE$ = /^\s*/;
 
+// Counts the column offset in a string, taking tabs into account.
+// Used mostly to find indentation.
+// adapted from codemirror countColumn
+function count_column( string, end, tabSize, startIndex, startValue )
+{
+    var i, n, nextTab;
+    if ( null == end )
+    {
+        end = string.search( Stream.$NONSPC$ );
+        if ( -1 == end ) end = string.length;
+    }
+    for (i=startIndex||0,n=startValue||0 ;;)
+    {
+        nextTab = string.indexOf( "\t", i );
+        if ( nextTab < 0 || nextTab >= end ) return n + (end - i);
+        n += nextTab - i;
+        n += tabSize - (n % tabSize);
+        i = nextTab + 1;
+    }
+}
+
 
 // parser factories
 var Parser = Class({
