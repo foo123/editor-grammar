@@ -114,6 +114,7 @@ function operate( x, F, F0, i0, i1 )
     return Fv;
 }
 
+// http://jsperf.com/functional-loop-with-try-catch
 function iterate( F, i0, i1, F0 )
 {
     if ( i0 > i1 ) return F0;
@@ -270,7 +271,17 @@ function extend(/* var args here.. */)
     }
     return o;
 }
-    
+
+function TRUE( )
+{
+    return true;
+}
+
+function FALSE( )
+{
+    return false;
+}
+
 function make_array( a, force )
 {
     return ( force || T_ARRAY !== get_type( a ) ) ? [ a ] : a;

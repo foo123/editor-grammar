@@ -378,6 +378,11 @@ function preprocess_grammar( grammar )
                             G[id].type = 'action';
                             G[id].error = tok;
                         }
+                        else if ( 'nop' === type )
+                        {
+                            G[id].type = 'action';
+                            G[id].nop = true;
+                        }
                         else if ( 'group' === type )
                         {
                             G[id].type = 'sequence';
@@ -529,6 +534,12 @@ function preprocess_grammar( grammar )
                 tok.type = "simple";
                 tok.tokens = tok['simple'];
                 del(tok,'simple');
+            }
+            else if ( tok['nop'] )
+            {
+                tok.type = "action";
+                tok.action = [ 'nop', tok.nop, false ];
+                tok.nop = true;
             }
             else if ( tok['error'] )
             {
@@ -1252,7 +1263,8 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
     {
         if ( !token[HAS]('action') )
         {
-            if ( token[HAS]('error') ) token.action = [A_ERROR, token.error, !!token['in-context']];
+            if ( token[HAS]('nop') ) token.action = [A_NOP, token.nop, !!token['in-context']];
+            else if ( token[HAS]('error') ) token.action = [A_ERROR, token.error, !!token['in-context']];
             else if ( token[HAS]('context') ) token.action = [!!token.context?A_CTXSTART:A_CTXEND, token['context'], !!token['in-context']];
             else if ( token[HAS]('context-start') ) token.action = [A_CTXSTART, token['context-start'], !!token['in-context']];
             else if ( token[HAS]('context-end') ) token.action = [A_CTXEND, token['context-end'], !!token['in-context']];
@@ -1264,7 +1276,8 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
         }
         else
         {
-            if ( 'error' === token.action[0] ) token.action[0] = A_ERROR;
+            if ( 'nop' === token.action[0] ) token.action[0] = A_NOP;
+            else if ( 'error' === token.action[0] ) token.action[0] = A_ERROR;
             else if ( 'context-start' === token.action[0] ) token.action[0] = A_CTXSTART;
             else if ( 'context-end' === token.action[0] ) token.action[0] = A_CTXEND;
             else if ( 'push' === token.action[0] ) token.action[0] = A_MCHSTART;
@@ -1273,6 +1286,8 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
             else if ( 'indent' === token.action[0] ) token.action[0] = A_INDENT;
             else if ( 'outdent' === token.action[0] ) token.action[0] = A_OUTDENT;
         }
+        // NOP action, no action
+        if ( token.nop ) token.action[0] = A_NOP;
         $token$ = new tokenizer( T_ACTION, tokenID, token.action.slice(), $msg$, $modifier$ );
         $token$.ci = !!token.caseInsensitive||token.ci;
         // pre-cache tokenizer to handle recursive calls to same tokenizer
@@ -1391,10 +1406,42 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
     return cachedTokens[ tokenID ];
 }
 
+function get_block_types( grammar, the_styles )
+{
+    var Style = grammar.Style, Lex = grammar.Lex, Syntax = grammar.Syntax, t, T,
+        blocks = [], visited = {};
+    for (t in Style )
+    {
+        if ( !Style[HAS](t) ) continue;
+        T = Lex[t] || Syntax[t];
+        if ( T && ('block' == T.type || 'comment' === T.type) )
+        {
+            if ( the_styles && (Style[ t+'.inside' ]||Style[ t ]) )
+            {
+                t = Style[ t+'.inside' ] || Style[ t ];
+                if ( !visited[HAS](t) )
+                {
+                    blocks.push( t );
+                    visited[t] = 1;
+                }
+            }
+            else if ( !the_styles )
+            {
+                if ( !visited[HAS](t) )
+                {
+                    blocks.push( t );
+                    visited[t] = 1;
+                }
+            }
+        }
+    }
+    return blocks;
+}
+
 function parse_grammar( grammar ) 
 {
     var RegExpID, tokens,
-        Extra, Style, Lex, Syntax, 
+        Extra, Style, Fold, Lex, Syntax, 
         cachedRegexes, cachedMatchers, cachedTokens, 
         interleavedTokens, comments, keywords;
     
@@ -1405,6 +1452,7 @@ function parse_grammar( grammar )
     RegExpID = grammar.RegExpID || null;
     Extra = grammar.Extra ? clone(grammar.Extra) : { };
     Style = grammar.Style ? clone(grammar.Style) : { };
+    Fold = /*grammar.Fold ||*/ null;
     Lex = grammar.Lex ? clone(grammar.Lex) : { };
     Syntax = grammar.Syntax ? clone(grammar.Syntax) : { };
     
@@ -1415,6 +1463,7 @@ function parse_grammar( grammar )
     
     grammar = preprocess_grammar({
         Style           : Style,
+        Fold            : Fold,
         Lex             : Lex,
         Syntax          : Syntax,
         $parser         : null,

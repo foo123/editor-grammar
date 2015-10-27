@@ -7,6 +7,7 @@
 
 * [Extra Settings](#extra-settings)
 * [Style Model](#style-model)
+* [Fold Model **(not available)**](#fold-model)
 * [Lexical Model](#lexical-model)
     1. [Simple Tokens](#simple-tokens)
     2. [Block Tokens](#block-tokens)
@@ -47,6 +48,25 @@ example:
 * `Grammar.Extra` defines any (editor-specific) extra settings (eg. `electricChars`, `fold`, etc..) to be added to the generated mode, and is a map of the form:
 
 `editor_specific_setting_id  -> editor_specific_setting_value`
+
+
+
+Generic Code Folding is supported (by generic folders implementations). Add a `fold` type in: Grammar.Extra.fold` option.
+Generic Fold Types supported:
+
+* `"brace"` / `"cstyle"` , folds on braces (i.e `{}`) and brackets (i.e `[]`)
+* `"indent"` / `"indentation"` , folds on blocks delimited by same indentation (e.g in `python`)
+* `"markup"` / `"xml"` / `"html"` , folds based `xml`/`markup` tags
+* folding on `"block"`-type comments (if existing and defined as such) is done automaticaly
+
+
+
+
+###Fold Model
+**(not available)**
+
+In future, support a parametrisable `Grammar.Fold` Model which can parametrise folders
+for user-defined custom code folding (see above).
 
 
 

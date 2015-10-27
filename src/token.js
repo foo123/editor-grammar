@@ -227,8 +227,8 @@ function t_action( a, stream, state, token )
     // do action only if state.status handles (action) errors, else dont clutter
     if ( no_errors || !action_def || !token || !token.pos ) return true;
     is_block = !!(T_BLOCK & token.T);
-    // partial block not completed yet, postpone
-    if ( is_block && !token.block ) return true;
+    // NOP action, return OR partial block not completed yet, postpone
+    if ( A_NOP === action_def[ 0 ] || is_block && !token.block ) return true;
 
     action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ];
     msg = self.msg; queu = state.queu; symb = state.symb; ctx = state.ctx;
