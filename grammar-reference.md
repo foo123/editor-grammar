@@ -6,13 +6,14 @@
 ###Contents
 
 * [Extra Settings](#extra-settings)
+    1. [Code Folding **(new, optional)**](#code-folding)
 * [Style Model](#style-model)
 * [Fold Model **(not available)**](#fold-model)
 * [Lexical Model](#lexical-model)
     1. [Simple Tokens](#simple-tokens)
     2. [Block Tokens](#block-tokens)
     3. [Action Tokens **(new)**](#action-tokens)
-    4. [Lex shorthand type annotations **(new,optional)**](#lex-shorthand-type-annotations)
+    4. [Lex shorthand type annotations **(new, optional)**](#lex-shorthand-type-annotations)
 * [Syntax Model **(optional)**](#syntax-model)
     1. [Syntax PEG/BNF-like notations **(new)**](#syntax-pegbnf-like-notations)
 * [Parser](#parser)
@@ -50,28 +51,34 @@ example:
 `editor_specific_setting_id  -> editor_specific_setting_value`
 
 
+####Code Folding
+**(new, optional)**
 
-Generic Code Folding is supported (by generic folders implementations). Add a `"fold"` type in: `Grammar.Extra.fold` option.
-Generic Folding Types supported:
+Generic, editor-independent, code folding functionality is supported (by generic folders implementations).
+
+Add a `fold` type in the `Grammar.Extra."fold"` option.
+
+**Generic Folding Types supported:**
 
 * `"brace"` / `"cstyle"` , folds on braces (i.e `{}`) and brackets (i.e `[]`)
-* `"indent"` / `"indentation"` , folds on blocks delimited by same indentation (e.g in `python`)
+* `"indent"` / `"indentation"` , folds on blocks delimited by same indentation (e.g as in `python`)
 * `"markup"` / `"xml"` / `"html"` , folds based on `xml`/`markup` tags and `CDATA` blocks
 * **NOTE** folding `"block"`-type comments, if existing and defined as such, is done automaticaly, no need to add separate folder option
 
 
-**NOTE** One may use multiple different code-folders, added with `+`.
+**NOTE** One may use multiple different code-folders, combined with `+` operator.
 
 
 For example:
 
 ```javascript
 "Extra"         : {
-    // denote multiple code folders in order by "+",
+    // combine multiple code folders in order by "+",
     // here both indentation-based and brace-based (each one will apply where applicable, in the order specified)
     "fold"      : "indentation+brace"
 }
 ```
+
 
 
 ###Style Model
@@ -82,11 +89,12 @@ For example:
 
 
 
+
 ###Fold Model
 **(not available)**
 
 In future, support a parametrisable `Grammar.Fold` Model which can parametrise code folders
-for user-defined custom code folding (see above).
+for user-defined custom code folding (see [above](#code-folding)).
 
 
 
