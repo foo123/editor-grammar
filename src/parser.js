@@ -367,7 +367,7 @@ var Parser = Class({
     
     ,parse: function( code, parse_type ) {
         var self = this, lines = (code||"").split(newline_re), l = lines.length,
-            linetokens = null, state, parse_errors, parse_tokens, ret;
+            linetokens = null, state, parse_errors, parse_tokens, err, ret;
         
         parse_type = parse_type || TOKENS;
         parse_errors = !!(parse_type & ERRORS);
@@ -394,6 +394,17 @@ var Parser = Class({
                 if ( stream.eol() ) { state.line++; if ( state.$blank$ ) state.bline++; }
                 else while ( !stream.eol() ) self.token( stream, state );
             }, 0, l-1);
+        
+        
+        if ( parse_errors && state.queu && state.queu.length )
+        {
+            // generate errors for unmatched tokens, if needed
+            while( state.queu.length )
+            {
+                err = state.queu.shift( );
+                error_( state, err[1], err[2], err[3], err[4], null, err[5] );
+            }
+        }
         
         ret = parse_tokens && parse_errors
             ? {tokens:linetokens, errors:state.err}

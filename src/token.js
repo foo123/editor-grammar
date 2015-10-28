@@ -195,7 +195,7 @@ function t_err( t )
 function error_( state, l1, c1, l2, c2, t, err )
 {
     //if ( state.err )
-    state.err[ l1+'_'+c1+'_'+l2+'_'+c2+'_'+t.name ] = [ l1, c1, l2, c2, err || t_err( t ) ];
+    state.err[ l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
     //return state;
 }
 
@@ -341,7 +341,12 @@ function t_action( a, stream, state, token )
         }
         t = group_replace( t, t_str );
         if ( case_insensitive ) t = t[LOWER]();
-        queu.unshift( [t, l1, c1, l2, c2] );
+        self.$msg = msg
+            ? group_replace( msg, t, true )
+            : 'Token does not match "'+t+'"';
+        // used when end-of-file is reached and unmatched tokens exist in the queue
+        // to generate error message, if needed, as needed
+        queu.unshift( [t, l1, c1, l2, c2, t_err( self )] );
     }
 
     else if ( A_UNIQUE === action )

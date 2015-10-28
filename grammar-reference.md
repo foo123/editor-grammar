@@ -56,19 +56,22 @@ Generic Folding Types supported:
 
 * `"brace"` / `"cstyle"` , folds on braces (i.e `{}`) and brackets (i.e `[]`)
 * `"indent"` / `"indentation"` , folds on blocks delimited by same indentation (e.g in `python`)
-* `"markup"` / `"xml"` / `"html"` , folds based `xml`/`markup` tags
-* folding on `"block"`-type comments (if existing and defined as such) is done automaticaly
+* `"markup"` / `"xml"` / `"html"` , folds based on `xml`/`markup` tags and `CDATA` blocks
+* **NOTE** folding `"block"`-type comments, if existing and defined as such, is done automaticaly, no need to add separate folder option
 
 
+**NOTE:** One may use multiple different code-folders, added with `+`.
 
 
-###Fold Model
-**(not available)**
+For example:
 
-In future, support a parametrisable `Grammar.Fold` Model which can parametrise folders
-for user-defined custom code folding (see above).
-
-
+```javascript
+Extra       : {
+    // denote multiple code folders in order by "+",
+    // here both indentation-based and brace-based (each one will apply where applicable, in the order specified)
+    "fold"  : "indentation+brace"
+}
+```
 
 
 ###Style Model
@@ -77,6 +80,13 @@ for user-defined custom code folding (see above).
 
 `token_id  -> editor_specific_style_tag`
 
+
+
+###Fold Model
+**(not available)**
+
+In future, support a parametrisable `Grammar.Fold` Model which can parametrise folders
+for user-defined custom code folding (see above).
 
 
 
