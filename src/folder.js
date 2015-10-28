@@ -4,8 +4,8 @@ function Type( TYPE, positive )
     if ( T_STR_OR_ARRAY & get_type( TYPE ) )
         TYPE = new_re( '\\b(' + map( make_array( TYPE ).sort( by_length ), esc_re ).join( '|' ) + ')\\b' );
     return false === positive
-    ? function( type ) { return !TYPE.test( type ); }
-    : function( type ) { return TYPE.test( type ); };
+    ? function( type ) { return !type || !TYPE.test( type ); }
+    : function( type ) { return !!type && TYPE.test( type ); };
 }
 
 function next_tag( iter, T, M, L, R, S )
@@ -23,7 +23,7 @@ function next_tag( iter, T, M, L, R, S )
             }
             else return;
         }
-        if ( !(type=iter.token(iter.row, found.index+1)) || !T( type ) )
+        if ( !T( iter.token(iter.row, found.index+1) ) )
         {
             iter.col = found.index + 1;
             continue;
@@ -39,7 +39,7 @@ function end_tag( iter, T, M, L, R, S )
     for (;;)
     {
         gt = iter.text.indexOf( R, iter.col );
-        if ( -1 == gt )
+        if ( -1 === gt )
         {
             if ( iter.next( ) )
             {
@@ -48,7 +48,7 @@ function end_tag( iter, T, M, L, R, S )
             }
             else return;
         }
-        if ( !(type=iter.token(iter.row, gt+1)) || !T( type ) )
+        if ( !T( iter.token(iter.row, gt+1) ) )
         {
             iter.col = gt + 1;
             continue;
@@ -66,13 +66,13 @@ var Folder = {
     
      Pattern: function( S, E, T ) {
         // TODO
-        return function( ){ };
+        return function fold_pattern( ){ };
     }
     
     ,Indented: function( NOTEMPTY ) {
         NOTEMPTY = NOTEMPTY || Stream.$NOTEMPTY$;
         
-        return function( iter ) {
+        return function fold_indentation( iter ) {
             var first_line, first_indentation, cur_line, cur_indentation,
                 start_line = iter.row, start_pos, last_line_in_fold, end_pos, i, end;
             
@@ -109,24 +109,24 @@ var Folder = {
         if ( !S || !E ) return function( ){ };
         T = T || TRUE;
 
-        return function( iter ) {
+        return function fold_delimiter( iter ) {
             var line = iter.row, col = iter.col,
-                lineText, startCh, at, pass, found,
+                lineText, startCh, at, pass, found, tokenType,
                 depth, lastLine, end, endCh, i, text, pos, nextOpen, nextClose;
             
             lineText = iter.line( line );
             for (at=col,pass=0 ;;)
             {
                 var found = at<=0 ? -1 : lineText.lastIndexOf( S, at-1 );
-                if ( -1 == found )
+                if ( -1 === found )
                 {
-                    if ( 1 == pass ) return;
+                    if ( 1 === pass ) return;
                     pass = 1;
                     at = lineText.length;
                     continue;
                 }
-                if ( 1 == pass && found < col ) return;
-                if ( T( iter.token( line, found+1 ) ) )
+                if ( 1 === pass && found < col ) return;
+                if ( T( tokenType = iter.token( line, found+1 ) ) )
                 {
                     startCh = found + S.length;
                     break;
@@ -136,7 +136,7 @@ var Folder = {
             depth = 1; lastLine = iter.last();
             outer: for (i=line; i<=lastLine; ++i)
             {
-                text = iter.line( i ); pos = i==line ? startCh : 0;
+                text = iter.line( i ); pos = i===line ? startCh : 0;
                 for (;;)
                 {
                     nextOpen = text.indexOf( S, pos );
@@ -144,9 +144,12 @@ var Folder = {
                     if ( nextOpen < 0 ) nextOpen = text.length;
                     if ( nextClose < 0 ) nextClose = text.length;
                     pos = MIN( nextOpen, nextClose );
-                    if ( pos == text.length ) break;
-                    if ( pos == nextOpen ) ++depth;
-                    else if ( !--depth ) { end = i; endCh = pos; break outer; }
+                    if ( pos >= text.length ) break;
+                    if ( iter.token(i, pos+1) == tokenType )
+                    {
+                        if ( pos === nextOpen ) ++depth;
+                        else if ( !--depth ) { end = i; endCh = pos; break outer; }
+                    }
                     ++pos;
                 }
             }
@@ -160,43 +163,45 @@ var Folder = {
         L = L || "<"; R = R || ">"; S = S || "/";
         M = M || new_re( esc_re(L) + "(" + esc_re(S) + "?)([a-zA-Z_\\-][a-zA-Z0-9_\\-:]*)", "g" );
 
-        return function( iter ) {
+        return function fold_markup( iter ) {
             iter.col = 0; iter.min = iter.first( ); iter.max = iter.last( );
             iter.text = iter.line( iter.row );
-            var openTag, end, start, close, tagName, startLine = iter.row;
+            var openTag, end, start, close, tagName, startLine = iter.row,
+                stack, next, startCh, i;
             for (;;)
             {
                 openTag = next_tag(iter, T, M, L, R, S);
-                if ( !openTag || iter.row != startLine || !(end = end_tag(iter, T, M, L, R, S)) ) return;
-                if ( !openTag[1] && end != "autoclosed" )
+                if ( !openTag || iter.row !== startLine || !(end = end_tag(iter, T, M, L, R, S)) ) return;
+                if ( !openTag[1] && "autoclosed" !== end  )
                 {
                     start = [iter.row, iter.col]; tagName = openTag[2]; close = null;
                     // start find_matching_close
-                    var stack = [], next, startCh, i;
+                    stack = [];
                     for (;;)
                     {
                         next = next_tag(iter, T, M, L, R, S);
                         startLine = iter.row; startCh = iter.col - (next ? next[0].length : 0);
                         if ( !next || !(end = end_tag(iter, T, M, L, R, S)) ) return;
-                        if ( end == "autoclosed" ) continue;
+                        if ( "autoclosed" === end  ) continue;
                         if ( next[1] )
                         {
                             // closing tag
                             for (i=stack.length-1; i>=0; --i)
                             {
-                                if ( stack[i] == next[2] )
+                                if ( stack[i] === next[2] )
                                 {
                                     stack.length = i;
                                     break;
                                 }
                             }
-                            if ( i < 0 && (!tagName || tagName == next[2]) )
+                            if ( i < 0 && (!tagName || tagName === next[2]) )
                             {
-                                close = {
+                                /*close = {
                                     tag: next[2],
                                     pos: [startLine, startCh, iter.row, iter.col]
                                 };
-                                break;
+                                break;*/
+                                return [start[0], start[1], startLine, startCh];
                             }
                         }
                         else
@@ -206,10 +211,10 @@ var Folder = {
                         }
                     }
                     // end find_matching_close
-                    if ( close )
+                    /*if ( close )
                     {
                         return [start[0], start[1], close.pos[0], close.pos[1]];
-                    }
+                    }*/
                 }
             }
         };
