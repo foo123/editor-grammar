@@ -1,4 +1,4 @@
-##Grammar configuration options
+##Grammar Specification options
 
 `Grammar.Lex` and `Grammar.Syntax` parts are similar in notation and functionality to [Parsing Expression Grammars (`PEGs`)](https://en.wikipedia.org/wiki/Parsing_expression_grammar),  [(extended) BNF](https://en.wikipedia.org/wiki/Backus%E2%80%93Naur_Form)-like notation can also be used (see below)
 
@@ -60,23 +60,23 @@ Generic Folding Types supported:
 * **NOTE** folding `"block"`-type comments, if existing and defined as such, is done automaticaly, no need to add separate folder option
 
 
-**NOTE:** One may use multiple different code-folders, added with `+`.
+**NOTE** One may use multiple different code-folders, added with `+`.
 
 
 For example:
 
 ```javascript
-Extra       : {
+"Extra"         : {
     // denote multiple code folders in order by "+",
     // here both indentation-based and brace-based (each one will apply where applicable, in the order specified)
-    "fold"  : "indentation+brace"
+    "fold"      : "indentation+brace"
 }
 ```
 
 
 ###Style Model
 
-`Grammar.Style` model defines the mapping of tokens to editor styles and is a map of the form:
+`Grammar.Style` Model defines the mapping of tokens to editor styles and is a map of the form:
 
 `token_id  -> editor_specific_style_tag`
 
@@ -85,15 +85,15 @@ Extra       : {
 ###Fold Model
 **(not available)**
 
-In future, support a parametrisable `Grammar.Fold` Model which can parametrise folders
+In future, support a parametrisable `Grammar.Fold` Model which can parametrise code folders
 for user-defined custom code folding (see above).
 
 
 
 
-###Lexical model
+###Lexical Model
 
-`Grammar.Lex` model defines the mapping of token patterns and token configuration to an associated `token_id` and is a map of the form:
+`Grammar.Lex` Model defines the mapping of token patterns and token configuration to an associated `token_id` and is a map of the form:
 
 `token_id  -> token_configuration_object`
 
@@ -147,11 +147,11 @@ for user-defined custom code folding (see above).
 
 * a literal `empty string` token (  `''`  ) matches `non-space` ; can be useful when multiple tokens should be consecutive with no space between them
 
-* a literal `string` becomes a token (eg inside Syntax model sequence) with a `tokenID` same as its `literal value`
+* a literal `string` becomes a token (eg inside `Syntax` Model sequence) with a `tokenID` same as its `literal value`
 
 * a token can be defined using just the `token_id` and the token pattern(s); token type is assumed `"simple"`
 * multiple `"simple"` tokens (which are NOT regular expresions) are grouped into one regular expression by default using `"\\b"` (word-boundary) delimiter; this is usefull for speed fine-tuning the parser, adding the `"combine"` property in the token configuration, can alter this option, or use a different delimiter
-* `"simple"` tokens can also be used to enable *keyword autocomplete functionality* (`"autocomplete" : true`, option )
+* `"simple"` tokens can also be used to enable *keyword autocomplete functionality* (`"autocomplete":true`, option )
 
 
 
@@ -274,15 +274,15 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
 ```
 
 
-###Syntax model
+###Syntax Model
 **(optional)**
 
-`Grammar.Syntax` model defines the mapping of token context-specific sequences to an associated `composite_token_id` and is a map of the form:
+`Grammar.Syntax` Model defines the mapping of token context-specific sequences to an associated `composite_token_id` and is a map of the form:
 
 `composite_token_id  -> composite_token_configuration_object`
 
 
-* Inside the `Syntax` model, *(single) tokens* can also be defined (similar to `Lex` part), however it is recommended (single) tokens be defined in `Lex` part
+* Inside the `Syntax` Model, *(single) tokens* can also be defined (similar to `Lex` part), however it is recommended (single) tokens be defined in `Lex` part
 
 * `Syntax` includes *special token types* (like generalised regular expressions for composite token sequences, or parsing expressions in the style of `PEG`s)
 
@@ -503,11 +503,11 @@ The new `specification-analyser-renderer model` has the following features / adv
 
 1. Specification is at the same time both **concise** and **detailed, self-contained** (this is achieved by modeling all necessary features of a language in a symbolic way, see below).
 2. Specifications can be **extended / merged / combined** to **construct new specifications** for variations, dialects, composite languages, with minimum effort (this is achieved by the appropriate format for a specification and how/what it models, see below).
-3. The model is **based on interfaces** for/between analyser and renderer, while implementations can vary as needed. This **decouples highlighting specifications from underlying implementations** and differences between platforms,editors,languages and so on..
-4. Optionaly, a specification can be **directly transformed into hard code** (highlight mode source code for a language) and be used directly (in place of analyser) without re-doing the first 2 stages (specification - analyser).
+3. The model is **based on interfaces** for analyser and renderer, while (underlying) implementations can vary as needed. This **decouples highlighting specifications from underlying implementations** and differences between platforms,editors,languages and so on..
+4. Optionaly, a specification can be **directly transformed into hard code** (highlight mode source code for a language) and be used directly (in place of analyser) without re-doing the first 2 stages (`specification - analyser`).
 
 
-The format for a specification should be such that is widely supported, is textual or also has a equivalent strictly-textual representation, is concise, and enables compositions operations. `JSON` is such a format (and ubiquitous in javascript-based projects) and is the format used by the `grammar` (`specification`).
+The format for a specification should be such that is widely supported, is textual or also has a equivalent strictly-textual representation, is concise, and enables composition operations. `JSON` is such a format (and ubiquitous in javascript-based projects) and is the format used by the `grammar` (`specification`).
 
 In order for a (grammar) specification for (programming) language highlight to be detailed and self-contained (to be re-usable and flexible under the most general conditions), and also concise, it should model all available types of tokens/actions which play a part in the code and the way it is highlighted (usualy not modeled by other approaches or other grammar specifications).
 
@@ -516,7 +516,7 @@ For example (see above):
 
 * `<start-of-file>`, `<start-of-line>`, `<end-of-line>` token
 * `<first-non-blank-line>`, `<up-to-line-end>` token
-* `<non-space>`, `<indentation>`, `<de-indentation>` token
+* `<non-space>`, `<indentation>`, `<dedentation>` token
 * `<block>`, `<delimited>` token (e.g in the sense that `comments`, `strings`, `heredocs`,.. are delimited, block tokens)
 * and so on..
     
@@ -524,14 +524,14 @@ For example (see above):
 
 * handle arbitrary, user-defined, toggle comments and keyword autocompletion functionality (achieved by semanticaly annotating language `comments` and `keywords`)
 * handle arbitrary, user-defined, lint-like syntax-annotation functionality (achieved by modeling language `syntax` analysis except strictly `lexical` analysis, in-context)
+* handle arbitrary, user-defined, code `folding` (e.g via `fold action` token or via a `Fold` Model, see above)
+* handle arbitrary, user-defined, code `(out-)indentation` (e.g via `indent action` token or via an `Indentation` Model)
+* handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) via `match action` token
 * handle arbitrary, user-defined, dynamic contexts via `context action` token
 * handle arbitrary, user-defined, unique identifiers via `unique action` token
-* handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) via `match action` token
-* handle arbitrary, user-defined, code `folding` via `fold action` token
-* handle arbitrary, user-defined, code `(de-)indentation` via `indent action` token
 * handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token
 * handle arbitrary, user-defined, `local/global/scoped` relations via `scope action` token
 * and so on..
 
 
-The difference between `<indentation>` token and `<indent>` action token (although related) is that the `indentation` token **recognizes** indentations and indentation changes (that may signal a code block, for example like braces do), while an `indent` action token **creates** dynamic indentation (e.g by inserting `indentation` tokens).
+The difference between `<indentation>` token and `<indent>` action token (although related) is that the `indentation` token **recognizes** indentations and indentation changes (that may signal a code block, for example like braces do), while an `indent` action token **creates** dynamic indentation (e.g by inserting `indentation` tokens, or symbols to be recognised by `indentation` tokens).
