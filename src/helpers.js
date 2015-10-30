@@ -1438,6 +1438,39 @@ function get_block_types( grammar, the_styles )
     return blocks;
 }
 
+function preprocess_and_parse_grammar( grammar )
+{
+    var processed = {}; // for recursive references
+    grammar.Lex = grammar.Lex || {}; grammar.Syntax = grammar.Syntax || {};
+    grammar = preprocess_grammar( grammar );
+    if ( grammar.Parser && grammar.Parser.length )
+    {
+        iterate( function process( i, T ) {
+            var id = T[ i ], t, token, type, tokens;
+            if ( processed[id] ) return;
+            if ( T_ARRAY & get_type( id ) )
+            {
+                // literal n-gram as array
+                t = id; id = "NGRAM_" + t.join("_");
+                if ( !grammar.Syntax[ id ] ) grammar.Syntax[ id ] = {type:"ngram", tokens:t};
+            }
+            token = get_backreference( id, grammar.Lex, grammar.Syntax );
+            if ( T_STR & get_type( token ) )
+            {
+                token = parse_peg_bnf_notation( token, grammar.Lex, grammar.Syntax );
+                token = grammar.Lex[ token ] || grammar.Syntax[ token ] || null;
+            }
+            if ( token )
+            {
+                processed[id] = token;
+                type = token.type ? tokenTypes[ token.type[LOWER]( ).replace( dashes_re, '' ) ] || T_SIMPLE : T_SIMPLE;
+                if ( T_COMPOSITE & type ) iterate( process, 0, token.tokens.length-1, token.tokens );
+            }
+        }, 0, grammar.Parser.length-1, grammar.Parser );
+    }
+    return grammar;
+}
+
 function parse_grammar( grammar ) 
 {
     var RegExpID, tokens,
