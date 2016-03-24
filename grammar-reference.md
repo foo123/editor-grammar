@@ -161,7 +161,7 @@ for user-defined custom code folding (see [above](#code-folding)).
 
 * multiple `"simple"` tokens (which are NOT regular expresions) are grouped into one regular expression by default using `"\\b"` (word-boundary) delimiter; this is usefull for speed fine-tuning the parser, adding the `"combine"` property in the token configuration, can alter this option, or use a different delimiter
 
-* `"simple"` tokens can also be used to enable *keyword autocomplete functionality* (`"autocomplete":true`, option )
+* `"simple"` tokens can also be used to enable *keyword autocomplete functionality* (`"autocomplete":true|false[keywords]`, option )
 
 * other tokens can be excepted, which would possibly match similarly to this token, for example `keywords` or `reserved tokens`, (`"except":["other_token1","other_token2",..]`, option )
 
