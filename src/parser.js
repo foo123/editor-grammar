@@ -15,6 +15,7 @@ function State( unique, s )
         self.status = s.status;
         self.stack = s.stack.slice();
         self.block = s.block;
+        self.token = s.token;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -40,6 +41,7 @@ function State( unique, s )
         self.status = s || 0;
         self.stack = [];
         self.block = null;
+        self.token = null;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -72,6 +74,7 @@ function state_dispose( state )
     state.status = null;
     state.stack = null;
     state.block = null;
+    state.token = null;
     state.queu = null;
     state.symb = null;
     state.ctx = null;
@@ -232,6 +235,7 @@ var Parser = Class({
             state.$blank$ = state.bline+1 === state.line;
         }
         state.$actionerr$ = false;
+        //state.token = null;
         stack = state.stack; line = state.line; pos = stream.pos;
         type = false; notfound = true; err = false; just_space = false;
         block_in_progress = state.block ? state.block.name : undef;
@@ -264,7 +268,7 @@ var Parser = Class({
                     {
                         tokenizer = interleaved_tokens[ii];
                         type = tokenize( tokenizer, stream, state, token );
-                        if ( false !== type ) { notfound = false; break; }
+                        if ( false !== type ) { notfound = false; state.token=tokenizer; break; }
                     }
                     if ( !notfound ) break;
                 }
@@ -285,7 +289,7 @@ var Parser = Class({
                         // skip this
                         if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
                         // generate error
-                        err = true; notfound = false; break;
+                        err = true; notfound = false; state.token=tokenizer; break;
                     }
                     // optional
                     /*else
@@ -323,7 +327,7 @@ var Parser = Class({
                         }
                     }
                     // not empty
-                    if ( true !== type ) { notfound = false; break; }
+                    if ( true !== type ) { notfound = false; state.token=tokenizer; break; }
                 }
             }
         }
@@ -355,6 +359,10 @@ var Parser = Class({
         //if ( state.$eol$ && state.$blank$ ) state.bline = state.line;
         
         return T;
+    }
+    
+    ,autocompletion: function( token, follows ) {
+        return generate_autocompletion( token, follows||[] );
     }
     
     ,tokenize: function( stream, state, row ) {

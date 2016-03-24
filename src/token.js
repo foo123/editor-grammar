@@ -37,7 +37,7 @@ function matcher( type, name, pattern, ptype, key )
     t.key = null;
 }*/
 
-function t_match( t, stream, eat )
+function t_match( t, stream, eat, any_match )
 {
     var self = t, PT = self.type, name, type,
         pattern = self.pattern, key = self.key,
@@ -51,7 +51,7 @@ function t_match( t, stream, eat )
         
         // matches start of block using startMatcher
         // and returns the associated endBlock matcher
-        if ( match = t_match( start, stream, eat ) )
+        if ( match = t_match( start, stream, eat, any_match ) )
         {
             // use the token key to get the associated endMatcher
             end = ends[ match[0] ];
@@ -74,7 +74,7 @@ function t_match( t, stream, eat )
         for (i=0,n=pattern.length; i<n; i++)
         {
             // each one is a matcher in its own
-            m = t_match( pattern[ i ], stream, eat );
+            m = t_match( pattern[ i ], stream, eat, any_match );
             if ( m ) return key ? [ i, m[1] ] : m;
         }
     }
@@ -98,42 +98,89 @@ function t_match( t, stream, eat )
         }
         else if ( T_CHARLIST === type )
         {
-            m = stream[CHAR](stream.pos) || null;
-            if ( m && (-1 < pattern.indexOf( m )) ) 
+            if ( true === any_match )
             {
-                if ( false !== eat ) stream.mov( 1 );
-                return [ key, m ];
+                m = -1;
+                var mm, cc;
+                for(n=pattern.length-1; n>=0; n--)
+                {
+                    mm = stream.indexOf(pattern[CHAR](n), stream.pos);
+                    if ( -1 < mm && (-1 === m || mm < m) ) 
+                    {
+                        m = mm; cc = pattern[CHAR](n);
+                    }
+                }
+                if ( -1 < m ) 
+                {
+                    if ( false !== eat ) stream.pos = m+1;
+                    return [ key, cc ];
+                }
+            }
+            else
+            {
+                m = stream[CHAR](stream.pos) || null;
+                if ( m && (-1 < pattern.indexOf( m )) ) 
+                {
+                    if ( false !== eat ) stream.mov( 1 );
+                    return [ key, m ];
+                }
             }
         }
         else if ( T_CHAR === type )
         {
-            m = stream[CHAR](stream.pos) || null;
-            if ( pattern === m ) 
+            if ( true === any_match )
             {
-                if ( false !== eat ) stream.mov( 1 );
-                return [ key, m ];
+                m = stream.indexOf(pattern, stream.pos);
+                if ( -1 < m ) 
+                {
+                    if ( false !== eat ) stream.pos = m+1;
+                    return [ key, pattern ];
+                }
+            }
+            else
+            {
+                m = stream[CHAR](stream.pos) || null;
+                if ( pattern === m ) 
+                {
+                    if ( false !== eat ) stream.mov( 1 );
+                    return [ key, m ];
+                }
             }
         }
         else if ( T_STR === type ) // ?? some pattern is undefined !!!!!!!!!
         {
             n = pattern.length;
-            if ( pattern === stream.substr(stream.pos, n) ) 
+            if ( true === any_match )
             {
-                if ( false !== eat ) stream.mov( n );
-                return [ key, pattern ];
+                m = stream.indexOf(pattern, stream.pos);
+                if ( -1 < m ) 
+                {
+                    if ( false !== eat ) stream.pos = m+n;
+                    return [ key, pattern ];
+                }
+            }
+            else
+            {
+                if ( pattern === stream.substr(stream.pos, n) ) 
+                {
+                    if ( false !== eat ) stream.mov( n );
+                    return [ key, pattern ];
+                }
             }
         }
     }
     return false;
 }
 
-function tokenizer( type, name, token, msg, modifier )
+function tokenizer( type, name, token, msg, modifier, except, autocompletions )
 {
     var self = this;
     self.type = type;
     self.name = name;
     self.token = token;
     self.modifier = modifier || null;
+    self.except = except || null;
+    self.autocompletions = autocompletions || null;
     self.pos = null;
     self.msg = msg || null;
     self.$msg = null;
@@ -157,7 +204,7 @@ function s_token( )
 
 function t_clone( t, required, modifier, $id )
 {
-    var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier );
+    var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier, t.except, t.autocompletions );
     tt.ci = t.ci; tt.mline = t.mline; tt.esc = t.esc; tt.inter = t.inter;
     tt.found = t.found; tt.min = t.min; tt.max = t.max;
     if ( required ) tt.status |= REQUIRED;
@@ -172,6 +219,7 @@ function t_clone( t, required, modifier, $id )
     t.name = null;
     t.token = null;
     t.modifier = null;
+    t.except = null;
     t.pos = null;
     t.msg = null; t.$msg = null;
     t.status = null;
@@ -380,15 +428,26 @@ function t_action( a, stream, state, token )
     return true;
 }
 
-function t_simple( t, stream, state, token )
+function t_simple( t, stream, state, token, exception )
 {
     var self = t, pattern = self.token, modifier = self.modifier,
-        type = self.type, tokenID = self.name,
+        type = self.type, tokenID = self.name, except = self.except, tok_except,
         line = state.line, pos = stream.pos, m = null, ret = false;
     
     self.status &= CLEAR_ERROR;
-    self.$msg = self.msg || null;
+    self.$msg = exception ? null : (self.msg || null);
     
+    if ( except )
+    {
+        for(var i=0,l=except.length; i<l; i++)
+        {
+            tok_except = except[i];
+            // exceptions are ONLY simple tokens
+            if ( self === tok_except || T_SIMPLE !== tok_except.type ) continue;
+            // exception matched, backup and fail
+            if ( t_simple( tok_except, stream, state, token, 1 ) ) { stream.bck( pos ); return false; }
+        }
+    }
     // match SOF (start-of-file, first line of source)
     if ( T_SOF === type ) { ret = 0 === state.line; }
     // match FNBL (first non-blank line of source)
@@ -430,6 +489,7 @@ function t_simple( t, stream, state, token )
         m = m[ 1 ];
         ret = modifier || tokenID; 
     }
+    if ( exception ) return ret;
     if ( false !== ret )
     {
         token.T = type; token.id = tokenID; token.type = ret;
@@ -451,7 +511,7 @@ function t_block( t, stream, state, token )
         block_start_pos, block_end_pos, block_inside_pos,
         b_start = '', b_inside = '', b_inside_rest = '', b_end = '', b_block,
         char_escaped, next, ret, is_required, $id = self.$id || block,
-        stack = state.stack, stream_pos, stream_pos0, stack_pos, line, pos
+        stack = state.stack, stream_pos, stream_pos0, stack_pos, line, pos, matched
     ;
 
     /*
@@ -525,17 +585,56 @@ function t_block( t, stream, state, token )
         {
             stream_pos0 = stream.pos;
             char_escaped = false;
-            while ( !stream.eol( ) ) 
+            if ( is_escaped || (T_CHARLIST !== block_end.ptype && T_CHAR !== block_end.ptype && T_STR !== block_end.ptype) )
             {
-                stream_pos = stream.pos;
-                if ( !char_escaped && t_match(block_end, stream) ) 
+                while ( !stream.eol( ) ) 
+                {
+                    stream_pos = stream.pos;
+                    if ( !char_escaped && t_match(block_end, stream) ) 
+                    {
+                        if ( has_interior )
+                        {
+                            if ( stream.pos > stream_pos && stream_pos > stream_pos0 )
+                            {
+                                ret = block_interior;
+                                stream.bck( stream_pos );
+                                continued = 1;
+                            }
+                            else
+                            {
+                                ret = block;
+                                ended = 1;
+                            }
+                        }
+                        else
+                        {
+                            ret = block;
+                            ended = 1;
+                        }
+                        b_end = stream.sel(stream_pos, stream.pos);
+                        break;
+                    }
+                    else
+                    {
+                        next = stream.nxt( 1 );
+                        b_inside_rest += next;
+                    }
+                    char_escaped = is_escaped && !char_escaped && esc_char === next;
+                    stream_pos = stream.pos;
+                }
+            }
+            else
+            {
+                // non-escaped block, 
+                // match at once instead of char-by-char
+                if ( matched = t_match(block_end, stream, true, true) )
                 {
                     if ( has_interior )
                     {
-                        if ( stream.pos > stream_pos && stream_pos > stream_pos0 )
+                        if ( stream.pos > stream_pos+matched[1].length )
                         {
                             ret = block_interior;
-                            stream.bck( stream_pos );
+                            stream.mov( -matched[1].length );
                             continued = 1;
                         }
                         else
@@ -550,15 +649,15 @@ function t_block( t, stream, state, token )
                         ended = 1;
                     }
                     b_end = stream.sel(stream_pos, stream.pos);
-                    break;
                 }
                 else
                 {
-                    next = stream.nxt( 1 );
-                    b_inside_rest += next;
+                    // skip to end of line, and continue
+                    stream.end( );
+                    ret = block_interior;
+                    continued = 1;
+                    b_inside_rest = stream.sel(stream_pos, stream.pos);
                 }
-                char_escaped = is_escaped && !char_escaped && esc_char === next;
-                stream_pos = stream.pos;
             }
         }
         else
@@ -670,7 +769,7 @@ function t_composite( t, stream, state, token )
         tokenizer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
         style = tokenize( tokenizer, stream, state, token );
         // bypass failed but optional tokens in the sequence and get to the next ones
-        } while (/*is_sequence &&*/ i0 < n && false === style && !(tokenizer.status & REQUIRED_OR_ERROR));
+        } while (/*is_sequence &&*/ i0 < n && false === style && !(tokenizer.status & REQUIRED/*_OR_ERROR*/));
         
         if ( false !== style )
         {
@@ -714,7 +813,8 @@ function t_composite( t, stream, state, token )
     else //if ( T_REPEATED & type )
     {
         found = self.found; min = self.min; max = self.max;
-        self.status &= CLEAR_REQUIRED;
+        //self.status &= CLEAR_REQUIRED;
+        self.status = 0;
         err = [];
         
         for (i=0; i<n; i++)
@@ -748,9 +848,9 @@ function t_composite( t, stream, state, token )
         }
         
         if ( found < min ) self.status |= REQUIRED;
-        else self.status &= CLEAR_REQUIRED;
+        //else self.status &= CLEAR_REQUIRED;
         if ( (found > max) || (found < min && 0 < tokens_required) ) self.status |= ERROR;
-        else self.status &= CLEAR_ERROR;
+        //else self.status &= CLEAR_ERROR;
         if ( self.status && !self.$msg && err.length ) self.$msg = err.join(' | ');
         return false;
     }
