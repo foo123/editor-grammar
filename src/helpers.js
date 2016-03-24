@@ -744,11 +744,11 @@ function preprocess_grammar( grammar )
     return grammar;
 }
 
-function generate_autocompletion( token, follows )
+function generate_autocompletion( token, follows, hash )
 {
-    follows = follows || [];
+    hash = hash || {}; follows = follows || [];
     if ( !token || !token.length ) return follows;
-    var i, l, j, m, tok, tok2, toks, i0;
+    var i, l, j, m, tok, tok2, toks, i0, w;
     for(i=0,l=token.length; i<l; i++)
     {
         tok = token[i];
@@ -757,35 +757,39 @@ function generate_autocompletion( token, follows )
         {
             if ( !!tok.autocompletions )
             {
-                follows.push.apply( follows, tok.autocompletions );
+                for(j=0,m=tok.autocompletions.length; j<m; j++)
+                {
+                    w = tok.autocompletions[j];
+                    if ( !hash[HAS]('w_'+w.word) )
+                    {
+                        follows.push( w );
+                        hash['w_'+w.word] = 1;
+                    }
+                }
             }
             else if ( (T_STR === tok.token.ptype) && (T_STR&get_type(tok.token.pattern)) && (tok.token.pattern.length > 1) )
             {
-                follows.push( {word:''+tok.token.pattern, meta:tok.name, ci:!!tok.ci} );
+                if ( !hash[HAS]('w_'+tok.token.pattern) )
+                {
+                    follows.push( {word:''+tok.token.pattern, meta:tok.name, ci:!!tok.ci} );
+                    hash['w_'+tok.token.pattern] = 1;
+                }
             }
-            /*else if ( T_CHARLIST === tok.token.ptype )
-            {
-                follows.push.apply( follows, tok.token.pattern.split('') );
-            }
-            else if ( T_REGEX === tok.token.ptype )
-            {
-                follows.push( tok.token.pattern[0].source );
-            }*/
         }
         else if ( T_ALTERNATION === tok.type )
         {
-            generate_autocompletion( tok.token, follows );
+            generate_autocompletion( tok.token, follows, hash );
         }
         else if ( T_SEQUENCE_OR_NGRAM & tok.type )
         {
             j = 0; m = tok.token.length;
             do{
-            generate_autocompletion( [tok2 = tok.token[j++]], follows );
-            }while(j < m && (((T_REPEATED & tok2.type) && 0 === tok2.min) || T_ACTION === tok2.type));
+            generate_autocompletion( [tok2 = tok.token[j++]], follows, hash );
+            }while(j < m && (((T_REPEATED & tok2.type) && (1 > tok2.min)) || T_ACTION === tok2.type));
         }
         else if ( T_REPEATED & tok.type )
         {
-            generate_autocompletion( [tok.token[0]], follows );
+            generate_autocompletion( [tok.token[0]], follows, hash );
         }
     }
     return follows;

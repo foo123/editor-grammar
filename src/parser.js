@@ -14,8 +14,8 @@ function State( unique, s )
         self.bline = s.bline;
         self.status = s.status;
         self.stack = s.stack.slice();
-        self.block = s.block;
         self.token = s.token;
+        self.block = s.block;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -40,8 +40,8 @@ function State( unique, s )
         self.bline = -1;
         self.status = s || 0;
         self.stack = [];
-        self.block = null;
         self.token = null;
+        self.block = null;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -73,8 +73,8 @@ function state_dispose( state )
     state.bline = null;
     state.status = null;
     state.stack = null;
-    state.block = null;
     state.token = null;
+    state.block = null;
     state.queu = null;
     state.symb = null;
     state.ctx = null;
@@ -234,8 +234,7 @@ var Parser = Class({
             }
             state.$blank$ = state.bline+1 === state.line;
         }
-        state.$actionerr$ = false;
-        //state.token = null;
+        state.$actionerr$ = false; state.token = null;
         stack = state.stack; line = state.line; pos = stream.pos;
         type = false; notfound = true; err = false; just_space = false;
         block_in_progress = state.block ? state.block.name : undef;
@@ -268,7 +267,7 @@ var Parser = Class({
                     {
                         tokenizer = interleaved_tokens[ii];
                         type = tokenize( tokenizer, stream, state, token );
-                        if ( false !== type ) { notfound = false; state.token=tokenizer; break; }
+                        if ( false !== type ) { notfound = false; break; }
                     }
                     if ( !notfound ) break;
                 }
@@ -285,11 +284,12 @@ var Parser = Class({
                     if ( tokenizer.status & REQUIRED_OR_ERROR )
                     {
                         // empty the stack of the syntax rule group of this tokenizer
+                        state.token = tokenizer;
                         empty( stack, tokenizer.$id /*|| true*/ );
                         // skip this
                         if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
                         // generate error
-                        err = true; notfound = false; state.token=tokenizer; break;
+                        err = true; notfound = false; break;
                     }
                     // optional
                     /*else
@@ -327,7 +327,7 @@ var Parser = Class({
                         }
                     }
                     // not empty
-                    if ( true !== type ) { notfound = false; state.token=tokenizer; break; }
+                    if ( true !== type ) { notfound = false; break; }
                 }
             }
         }
@@ -361,8 +361,24 @@ var Parser = Class({
         return T;
     }
     
-    ,autocompletion: function( token, follows ) {
-        return generate_autocompletion( token, follows||[] );
+    ,autocompletion: function( state ) {
+        var stack = state.stack, i, token, type,
+            hash = {}, follows = generate_autocompletion( [ state.token ], [], hash );
+        for(i=stack.length-1; i>=0; i--)
+        {
+            token = stack[ i ]; type = token.type;
+            if ( T_REPEATED & type )
+            {
+                follows = generate_autocompletion( [ token ], follows, hash );
+                if ( (0 < token.min) && follows.length ) break;
+            }
+            else if ( (T_SIMPLE === type) || (T_ALTERNATION === type) || (T_SEQUENCE_OR_NGRAM & type) )
+            {
+                follows = generate_autocompletion( [ token ], follows, hash );
+                if ( follows.length ) break;
+            }
+        }
+        return follows;
     }
     
     ,tokenize: function( stream, state, row ) {
