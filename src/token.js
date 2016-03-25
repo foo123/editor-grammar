@@ -768,8 +768,13 @@ function t_composite( t, stream, state, token )
         do {
         tokenizer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
         style = tokenize( tokenizer, stream, state, token );
-        // bypass failed but optional tokens in the sequence and get to the next ones
-        } while (/*is_sequence &&*/ i0 < n && false === style && !(tokenizer.status & REQUIRED/*_OR_ERROR*/));
+        // bypass failed but optional tokens in the sequence
+        // or successful lookahead tokens
+        // and get to the next ones
+        } while (/*is_sequence &&*/ i0 < n && (
+            ((true === style) && (T_LOOKAHEAD & tokenizer.type)) || 
+            ((false === style) && !(tokenizer.status & REQUIRED/*_OR_ERROR*/))
+        ));
         
         if ( false !== style )
         {
@@ -798,16 +803,13 @@ function t_composite( t, stream, state, token )
         return false;
     }
 
-    else if ( T_POSITIVE_LOOKAHEAD === type )
+    else if ( T_LOOKAHEAD & type )
     {
-        // TODO
-        self.status = 0; return false;
-    }
-
-    else if ( T_NEGATIVE_LOOKAHEAD === type )
-    {
-        // TODO
-        self.status = 0; return false;
+        tokenizer = t_clone( tokens[ 0 ], 1, modifier, $id );
+        style = tokenize( tokenizer, stream, state, token );
+        if ( stream.pos > stream_pos ) stream.bck( stream_pos );
+        if ( stack.length > stack_pos ) stack.length = stack_pos;
+        return T_NEGATIVE_LOOKAHEAD === type ? false === style : false !== style;
     }
 
     else //if ( T_REPEATED & type )

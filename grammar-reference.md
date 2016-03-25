@@ -298,7 +298,7 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
 
 * `Syntax` includes *special token types* (like generalised regular expressions for composite token sequences, or parsing expressions in the style of `PEG`s)
 
-* `Syntax` token `"type"` can be: `"alternation"`,`"sequence"`,`"zeroOrOne"`,`"zeroOrMore"`,`"oneOrMore"`,`"repeat"` ; these tokens contain sequences of subtokens (`"tokens"`) to be matched according to some scheme
+* `Syntax` token `"type"` can be: `"alternation"`,`"sequence"`,`"zeroOrOne"`,`"zeroOrMore"`,`"oneOrMore"`,`"repeat"` `"positiveLookahead"`, `"negativeLookahead"`; these tokens contain sequences of subtokens (`"tokens"`) to be matched according to some scheme
 
 * types:
     1. `"type":"repeat"`,`"repeat":[min, max]`,  match any of the tokens a minimum `min` times and a maximum `max` times else error (analogous to a regex: `(t1 | t2 | t3..){min, max}` , where `t1`, `t2`, etc are also composite tokens)
@@ -307,6 +307,8 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
     4. `"type":"oneOrMore"`,  match any of the tokens `one or more` times (analogous to a regex: `(t1 | t2 | t3..)+` , where `t1`, `t2`, etc are also composite tokens)
     5. `"type":"alternation"`,  match any of the tokens (analogous to a regex: `(t1 | t2 | t3..)` , where `t1`, `t2`, etc are also composite tokens)
     6. `"type":"sequence"`,  match all the tokens in sequence (analogous to a regex: `(t1 t2 t3 ..)` , where `t1`, `t2`, etc are also composite tokens) else error
+    7. `"type":"positiveLookahead"`,  try to match the token without consuming the token and return whether succesful or not
+    8. `"type":"negativeLookahead"`,  try to match the token without consuming the token and return whether failed or not
 
 * a syntax token can contain (direct or indirect) `recursive references` to itself ( **note:** some rule factoring may be needed, to avoid grammar `left-recursion` or `ambiguity` )
 
@@ -375,6 +377,19 @@ Specificaly:
     "tokens": ["t1"]
 }
 
+"t": "t1&"
+// is equivalent to =>
+"t": {
+    "type": "positiveLookahead",
+    "tokens": ["t1"]
+}
+
+"t": "t1!"
+// is equivalent to =>
+"t": {
+    "type": "negativeLookahead",
+    "tokens": ["t1"]
+}
 
 "t": "t1{1,3}"
 // is equivalent to =>
@@ -436,7 +451,7 @@ Specificaly:
 // note2: the PEG features
 // 1. negative lookahead feature (i.e not-predicate !t)
 // 2. positive lookahead feature (i.e and-predicate &t)
-// are currently NOT supported
+// ARE supported (see above)
 
 // regular expressions can also be defined inside a syntax rule, using /../[i] format, e.g /abc/,  /abc/i 
 // this will create a new simple token (with token_id=/abc/i) which is a regular expression

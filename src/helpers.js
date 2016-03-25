@@ -1042,20 +1042,19 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                 
                 else if ( '&' === c || '!' === c )
                 {
-                    // TODO
                     // lookahead modifier, applies to token that comes before
-                    /*if ( sequence.length )
+                    if ( sequence.length )
                     {
                         prev_token = sequence[sequence.length-1];
                         curr_token = '' + prev_token + c;
                         if ( !Syntax[ curr_token ] )
                             Syntax[ curr_token ] = {
-                                type:'&' === c ? 'positiveLookahead' : 'negativeLookahead',
+                                type:'!' === c ? 'negativeLookahead' : 'positiveLookahead',
                                 tokens:[prev_token]
                             }
                         sequence[sequence.length-1] = curr_token;
                     }
-                    else*/ token += c;
+                    else token += c;
                 }
                 
                 else if ( '|' === c )
@@ -1372,7 +1371,7 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
             {
                 autocompletions = get_autocomplete(
                     token,
-                    make_array( T_STR_OR_ARRAY & get_type(token.autocomplete) ? token.autocomplete : token.tokens ),
+                    T_STR_OR_ARRAY&get_type(token.autocomplete) ? make_array( token.autocomplete ) : $tokens$,
                     tokenID,
                     keywords
                 );
@@ -1455,7 +1454,6 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
             {
                 if ( T_POSITIVE_LOOKAHEAD === $type$ || T_NEGATIVE_LOOKAHEAD === $type$ )
                 {
-                    // TODO
                     $token$ = new tokenizer( $type$, tokenID, null, $msg$, $modifier$ );
                 }
                 else if ( (T_REPEATED & $type$) && (T_ARRAY & get_type( token.repeat )) )

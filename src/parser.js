@@ -283,8 +283,9 @@ var Parser = Class({
                     // error
                     if ( tokenizer.status & REQUIRED_OR_ERROR )
                     {
-                        // empty the stack of the syntax rule group of this tokenizer
+                        // keep it for autocompletion, if needed
                         state.token = tokenizer;
+                        // empty the stack of the syntax rule group of this tokenizer
                         empty( stack, tokenizer.$id /*|| true*/ );
                         // skip this
                         if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
@@ -302,18 +303,8 @@ var Parser = Class({
                 // found token
                 else
                 {
-                    // action token(s) follow, execute action(s) on current token
-                    if ( stack.length && T_ACTION === stack[stack.length-1].type )
-                    {
-                        while ( stack.length && T_ACTION === stack[stack.length-1].type )
-                        {
-                            action = stack.pop(); t_action( action, stream, state, token );
-                            // action error
-                            if ( action.status & ERROR ) state.$actionerr$ = true;
-                        }
-                    }
                     // partial block, apply maybe any action(s) following it
-                    else if ( stack.length > 1 && stream.eol() &&  
+                    if ( stack.length > 1 && stream.eol() &&  
                         (T_BLOCK & stack[stack.length-1].type) && state.block &&
                         state.block.name === stack[stack.length-1].name 
                     )
@@ -322,6 +313,17 @@ var Parser = Class({
                         while ( ii >= 0 && T_ACTION === stack[ii].type )
                         {
                             action = stack[ii--]; t_action( action, stream, state, token );
+                            // action error
+                            if ( action.status & ERROR ) state.$actionerr$ = true;
+                        }
+                    }
+                    // action token(s) follow, execute action(s) on current token
+                    else if ( stack.length && (T_ACTION === stack[stack.length-1].type) )
+                    {
+                        while ( stack.length && (T_ACTION === stack[stack.length-1].type) )
+                        {
+                            action = stack.pop();
+                            t_action( action, stream, state, token );
                             // action error
                             if ( action.status & ERROR ) state.$actionerr$ = true;
                         }
@@ -361,21 +363,22 @@ var Parser = Class({
         return T;
     }
     
-    ,autocompletion: function( state ) {
+    ,autocompletion: function( state, min_found ) {
         var stack = state.stack, i, token, type,
             hash = {}, follows = generate_autocompletion( [ state.token ], [], hash );
+        min_found  = min_found || 0;
         for(i=stack.length-1; i>=0; i--)
         {
             token = stack[ i ]; type = token.type;
             if ( T_REPEATED & type )
             {
                 follows = generate_autocompletion( [ token ], follows, hash );
-                if ( (0 < token.min) && follows.length ) break;
+                if ( (0 < token.min) && (min_found < follows.length) ) break;
             }
             else if ( (T_SIMPLE === type) || (T_ALTERNATION === type) || (T_SEQUENCE_OR_NGRAM & type) )
             {
                 follows = generate_autocompletion( [ token ], follows, hash );
-                if ( follows.length ) break;
+                if ( min_found < follows.length ) break;
             }
         }
         return follows;
