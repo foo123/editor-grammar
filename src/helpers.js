@@ -3,6 +3,7 @@
 // tokenizer helpers
 var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g,
     html_special_re = /[&"'<>]/g,
+    de_html_special_re = /&(amp|lt|gt|apos|quot);/g,
     peg_bnf_special_re = /^([.!&\[\]{}()*+?\/|'"]|\s)/,
     default_combine_delimiter = "\\b", 
     combine_delimiter = "(\\s|\\W|$)" /* more flexible than \\b */;
@@ -37,6 +38,24 @@ function html_escaper_entities( c )
     ;
 }
 
+function html_de_escaper_entities( c )
+{
+    return '&amp;' === c
+        ? '&'
+        :(
+        '&lt;' === c
+        ? '<'
+        : (
+        '&gt;' === c
+        ? '>'
+        : (
+        '&quot;' === c
+        ? '"'
+        : '\''
+        )))
+    ;
+}
+
 function html_escaper( c )
 {
     return "&#" + c.charCodeAt(0) + ";";
@@ -45,6 +64,11 @@ function html_escaper( c )
 function esc_html( s, entities )
 {
     return s.replace(html_special_re, entities ? html_escaper_entities : html_escaper);
+}
+
+function de_esc_html( s )
+{
+    return s.replace(de_html_special_re, html_de_escaper_entities);
 }
 
 
