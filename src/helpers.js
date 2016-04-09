@@ -95,20 +95,26 @@ function get_delimited( src, delim, esc, collapse_esc )
     return s;
 }
 
-function group_replace( pattern, token, raw )
+function group_replace( pattern, token, raw, in_regex )
 {
-    var i, l, c, g, replaced, offset = true === raw ? 0 : 1;
-    if ( T_STR & get_type(token) ) { token = [token, token, token]; offset = 0; }
+    var i, l, c, g, replaced, offset = true === raw ? 0 : 1,
+        placeholder = in_regex ? '\\' : '$', placeholder_code = in_regex ? 92 : 36;
+    if ( T_STR & get_type(token) )
+    {
+        if ( in_regex ) token = esc_re( token );
+        token = [token, token, token];
+        offset = 0;
+    }
     l = pattern.length; replaced = ''; i = 0;
     while ( i<l )
     {
         c = pattern[CHAR](i);
-        if ( (i+1<l) && '$' === c )
+        if ( (i+1<l) && placeholder === c )
         {
             g = pattern.charCodeAt(i+1);
-            if ( 36 === g ) // escaped $ character
+            if ( placeholder_code === g ) // escaped placeholder character
             {
-                replaced += '$';
+                replaced += placeholder;
                 i += 2;
             }
             else if ( 48 <= g && g <= 57 ) // group between 0 and 9
@@ -295,6 +301,7 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
     return cachedMatchers[ name ] = mtcher;
 }
 
+var regex_pattern_re = /(\\\\)*?\\\d/;
 function get_blockmatcher( name, tokens, RegExpID, cachedRegexes, cachedMatchers ) 
 {
     if ( cachedMatchers[ name ] ) return cachedMatchers[ name ];
@@ -303,14 +310,28 @@ function get_blockmatcher( name, tokens, RegExpID, cachedRegexes, cachedMatchers
     
     // build start/end mappings
     iterate(function( i ) {
-        var t1, t2;
+        var t1, t2, is_regex, is_regex_pattern;
         t1= get_simplematcher( name + '_0_' + i, get_re( tmp[i][0], RegExpID, cachedRegexes ), i, cachedMatchers );
         if ( tmp[i].length > 1 )
         {
-            if ( T_REGEX === t1.ptype && T_STR === get_type( tmp[i][1] ) && !has_prefix( tmp[i][1], RegExpID ) )
-                t2 = tmp[i][1];
+            is_regex = has_prefix( tmp[i][1], RegExpID );
+            is_regex_pattern = is_regex && regex_pattern_re.test(tmp[i][1]);
+            if ( T_REGEX === t1.ptype && T_STR === get_type( tmp[i][1] ) && (is_regex_pattern || !is_regex) )
+            {
+                if ( is_regex_pattern )
+                {
+                    t2 = new String(tmp[i][1]);
+                    t2.regex_pattern = RegExpID;
+                }
+                else
+                {
+                    t2 = tmp[i][1];
+                }
+            }
             else
+            {
                 t2 = get_simplematcher( name + '_1_' + i, get_re( tmp[i][1], RegExpID, cachedRegexes ), i, cachedMatchers );
+            }
         }
         else
         {
@@ -679,6 +700,12 @@ function preprocess_grammar( grammar )
                 tok.tokens = tok['negativeLookahead'];
                 del(tok,'negativeLookahead');
             }
+            else if ( tok['subgrammar'] || tok['grammar'] )
+            {
+                tok.type = 'subgrammar';
+                tok.tokens = tok['subgrammar'] || tok['grammar'];
+                if ( tok['subgrammar'] ) del(tok,'subgrammar'); else del(tok,'grammar');
+            }
         }
         else if ( tok.type )
         {
@@ -739,6 +766,11 @@ function preprocess_grammar( grammar )
             {
                 tok.type = 'positiveLookahead';
             }
+            else if ( 'grammar' === tl )
+            {
+                tok.type = 'subgrammar';
+            }
+            if ( 'subgrammar' === tok.type && !tok.tokens ) tok.tokens = id;
         }
     }
     return grammar;
@@ -1429,7 +1461,13 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
         
         else if ( T_COMPOSITE & $type$ )
         {
-            if ( T_NGRAM === $type$ )
+            if ( T_SUBGRAMMAR === $type$ )
+            {
+                // pre-cache tokenizer to handle recursive calls to same tokenizer
+                cachedTokens[ tokenID ] = new tokenizer( T_SUBGRAMMAR, tokenID, $tokens$, $msg$, $modifier$ );
+            }
+            
+            else if ( T_NGRAM === $type$ )
             {
                 // get n-gram tokenizer
                 tt = make_array_2( $tokens$ ); // array of arrays
@@ -1569,7 +1607,7 @@ function preprocess_and_parse_grammar( grammar )
 function parse_grammar( grammar ) 
 {
     var RegExpID, tokens,
-        Extra, Style, Fold, Lex, Syntax, 
+        Extra, Style, Fold, Match, Lex, Syntax, 
         cachedRegexes, cachedMatchers, cachedTokens, 
         interleavedTokens, comments, keywords;
     
@@ -1581,6 +1619,7 @@ function parse_grammar( grammar )
     Extra = grammar.Extra ? clone(grammar.Extra) : { };
     Style = grammar.Style ? clone(grammar.Style) : { };
     Fold = /*grammar.Fold ||*/ null;
+    Match = /*grammar.Match ||*/ null;
     Lex = grammar.Lex ? clone(grammar.Lex) : { };
     Syntax = grammar.Syntax ? clone(grammar.Syntax) : { };
     
@@ -1592,6 +1631,7 @@ function parse_grammar( grammar )
     grammar = preprocess_grammar({
         Style           : Style,
         Fold            : Fold,
+        Match           : Match,
         Lex             : Lex,
         Syntax          : Syntax,
         $parser         : null,

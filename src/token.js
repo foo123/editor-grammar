@@ -59,12 +59,22 @@ function t_match( t, stream, eat, any_match )
             
             // regex group number given, get the matched group pattern for the ending of this block
             // string replacement pattern given, get the proper pattern for the ending of this block
-            if ( T_REGEX === T0 && (T_STR_OR_NUM & T) )
+            if ( (T_REGEX === T0) && (T_STR_OR_NUM & T) )
             {
                 // the regex is wrapped in an additional group, 
                 // add 1 to the requested regex group transparently
-                m = T_NUM & T ? match[1][ end+1 ] : group_replace( end, match[1] );
-                end = new matcher( P_SIMPLE, name+'_End', m, m.length>1 ? T_STR : T_CHAR );
+                if ( end.regex_pattern )
+                {
+                    // dynamicaly-created regex with substistution group as well
+                    m = group_replace( end, match[1], 0, 1 );
+                    end = new matcher( P_SIMPLE, name+'_End', get_re(m, end.regex_pattern, {}), T_REGEX );
+                }
+                else
+                {
+                    // dynamicaly-created string with substistution group as well
+                    m = T_NUM & T ? match[1][ end+1 ] : group_replace( end, match[1] );
+                    end = new matcher( P_SIMPLE, name+'_End', m, m.length>1 ? T_STR : T_CHAR );
+                }
             }
             return end;
         }
@@ -186,7 +196,7 @@ function tokenizer( type, name, token, msg, modifier, except, autocompletions )
     self.$msg = null;
     self.status = 0;
     self.ci = false; self.mline = true; self.esc = false; self.inter = false;
-    self.found = 0; self.min = 0; self.max = 1;
+    self.found = 0; self.min = 0; self.max = 1; self.i0 = 0;
     self.$id = null;
 }
 
@@ -206,7 +216,7 @@ function t_clone( t, required, modifier, $id )
 {
     var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier, t.except, t.autocompletions );
     tt.ci = t.ci; tt.mline = t.mline; tt.esc = t.esc; tt.inter = t.inter;
-    tt.found = t.found; tt.min = t.min; tt.max = t.max;
+    tt.found = t.found; tt.min = t.min; tt.max = t.max; tt.i0 = t.i0;
     if ( required ) tt.status |= REQUIRED;
     if ( modifier ) tt.modifier = modifier;
     if ( $id ) tt.$id = $id;
@@ -242,7 +252,7 @@ function t_err( t )
 
 function error_( state, l1, c1, l2, c2, t, err )
 {
-    //if ( state.err )
+    if ( state.status & ERRORS )
     state.err[ l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
     //return state;
 }
@@ -432,20 +442,21 @@ function t_simple( t, stream, state, token, exception )
 {
     var self = t, pattern = self.token, modifier = self.modifier,
         type = self.type, tokenID = self.name, except = self.except, tok_except,
-        line = state.line, pos = stream.pos, m = null, ret = false;
+        backup, line = state.line, pos = stream.pos, m = null, ret = false;
     
     self.status &= CLEAR_ERROR;
     self.$msg = exception ? null : (self.msg || null);
     
     if ( except )
     {
+        backup = state_backup( state, stream );
         for(var i=0,l=except.length; i<l; i++)
         {
             tok_except = except[i];
             // exceptions are ONLY simple tokens
             if ( self === tok_except || T_SIMPLE !== tok_except.type ) continue;
             // exception matched, backup and fail
-            if ( t_simple( tok_except, stream, state, token, 1 ) ) { stream.bck( pos ); return false; }
+            if ( t_simple( tok_except, stream, state, token, 1 ) ) { state_backup( state, stream, backup ); return false; }
         }
     }
     // match SOF (start-of-file, first line of source)
@@ -636,19 +647,23 @@ function t_block( t, stream, state, token )
                             ret = block_interior;
                             stream.mov( -matched[1].length );
                             continued = 1;
+                            b_inside_rest = stream.sel(stream_pos, stream.pos);
                         }
                         else
                         {
                             ret = block;
                             ended = 1;
+                            b_inside_rest = stream.sel(stream_pos, stream.pos-matched[1].length);
+                            b_end = matched[1];
                         }
                     }
                     else
                     {
                         ret = block;
                         ended = 1;
+                        b_inside_rest = stream.sel(stream_pos, stream.pos-matched[1].length);
+                        b_end = matched[1];
                     }
-                    b_end = stream.sel(stream_pos, stream.pos);
                 }
                 else
                 {
@@ -709,9 +724,9 @@ function t_block( t, stream, state, token )
 function t_composite( t, stream, state, token )
 {
     var self = t, type = self.type, name = self.name, tokens = self.token, n = tokens.length,
-        tokenizer, style, modifier = self.modifier, found, min, max,
+        token_izer, style, modifier = self.modifier, found, min, max,
         tokens_required, tokens_err, stream_pos, stack_pos,
-        i, i0, tt, stack, err, $id, is_sequence;
+        i, i0, tt, stack, err, $id, is_sequence, backup;
 
     self.status &= CLEAR_ERROR;
     self.$msg = self.msg || null;
@@ -722,32 +737,55 @@ function t_composite( t, stream, state, token )
 
     tokens_required = 0; tokens_err = 0;
     $id = self.$id || get_id( );
-
-    if ( T_ALTERNATION === type )
+    
+    // TODO: a better error handling and recovery method
+    // it should error recover to minimum/closest state
+    // i.e generate only the minimum/necessary error notices
+    if ( T_SUBGRAMMAR === type )
+    {
+        self.status &= CLEAR_ERROR;
+        var subgrammar = new String(tokens[0]), nextTokenizer = stack.length ? stack[stack.length-1] : null;
+        subgrammar.subgrammar = 1;
+        subgrammar.next = nextTokenizer ? new tokenizer(T_POSITIVE_LOOKAHEAD, nextTokenizer.name, [nextTokenizer]) : null;
+        subgrammar.required = nextTokenizer ? nextTokenizer.status & REQUIRED : 0;
+        // return the subgrammar id to continue parsing with the subgrammar (if exists)
+        return subgrammar;
+    }
+    
+    else if ( T_ALTERNATION === type )
     {
         self.status |= REQUIRED;
         err = [];
-        
-        for (i=0; i<n; i++)
+        backup = state_backup( state, stream );
+        i0 = /*self.i0 ||*/ 0;
+        for (i=i0; i<n; i++)
         {
-            tokenizer = t_clone( tokens[ i ], 1, modifier, $id );
-            style = tokenize( tokenizer, stream, state, token );
+            token_izer = t_clone( tokens[ i ], 1, modifier, $id );
+            style = tokenize( token_izer, stream, state, token );
             
-            if ( tokenizer.status & REQUIRED )
+            if ( token_izer.status & REQUIRED )
             {
                 tokens_required++;
-                err.push( t_err( tokenizer ) );
+                err.push( t_err( token_izer ) );
             }
             
             if ( false !== style )
             {
+                /*if ( (i+1 < n) && (stack.length > stack_pos) )
+                {
+                    // push it to the stack as well, in case this option is not finaly matched
+                    token_izer = t_clone( self, 1, modifier ); token_izer.i0 = i+1; // to try next option
+                    token_izer.last_option = stack[stack.length-1];
+                    push_at( stack, stack_pos, token_izer );
+                    // a way is needed to check if this option finaly matched
+                    // using an internal stack can solve this, but how about the global stack?
+                }*/
                 return style;
             }
-            else if ( tokenizer.status & ERROR )
+            else if ( token_izer.status & ERROR )
             {
                 tokens_err++;
-                if ( stream.pos > stream_pos ) stream.bck( stream_pos );
-                if ( stack.length > stack_pos ) stack.length = stack_pos;
+                state_backup( state, stream, backup );
             }
         }
         
@@ -764,51 +802,57 @@ function t_composite( t, stream, state, token )
         is_sequence = !!(type & T_SEQUENCE);
         if ( is_sequence ) self.status |= REQUIRED;
         else self.status &= CLEAR_REQUIRED;
+        backup = state_backup( state, stream );
         i0 = 0;
         do {
-        tokenizer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
-        style = tokenize( tokenizer, stream, state, token );
+        token_izer = t_clone( tokens[ i0++ ], is_sequence, modifier, $id );
+        style = tokenize( token_izer, stream, state, token );
         // bypass failed but optional tokens in the sequence
         // or successful lookahead tokens
         // and get to the next ones
         } while (/*is_sequence &&*/ i0 < n && (
-            ((true === style) && (T_LOOKAHEAD & tokenizer.type)) || 
-            ((false === style) && !(tokenizer.status & REQUIRED/*_OR_ERROR*/))
+            ((true === style) && (T_LOOKAHEAD & token_izer.type)) || 
+            ((false === style) && !(token_izer.status & REQUIRED/*_OR_ERROR*/))
         ));
         
         if ( false !== style )
         {
             // not empty token
-            if ( true !== style || T_EMPTY !== tokenizer.type )
+            if ( (true !== style) || (T_EMPTY !== token_izer.type) )
             {
                 for (i=n-1; i>=i0; i--)
                     push_at( stack, stack_pos+n-i-1, t_clone( tokens[ i ], 1, modifier, $id ) );
             }
-                
+            if ( style.subgrammar /*&& !style.next*/ && (i0 < n) )
+            {
+                // add the nextTokenizer to subgrammar token, from here
+                style.next = new tokenizer(T_POSITIVE_LOOKAHEAD, tokens[i0].name, [tokens[i0]]);
+                style.required = tokens[i0].status & REQUIRED;
+            }
             return style;
         }
-        else if ( tokenizer.status & ERROR /*&& tokenizer.REQ*/ )
+        else if ( token_izer.status & ERROR /*&& token_izer.REQ*/ )
         {
             if ( is_sequence ) self.status |= ERROR;
             else self.status &= CLEAR_ERROR;
-            if ( stream.pos > stream_pos ) stream.bck( stream_pos );
-            if ( stack.length > stack_pos ) stack.length = stack_pos;
+            state_backup( state, stream, backup );
         }
-        else if ( is_sequence && (tokenizer.status & REQUIRED) )
+        else if ( is_sequence && (token_izer.status & REQUIRED) )
         {
             self.status |= ERROR;
         }
         
-        if ( self.status && !self.$msg ) self.$msg = t_err( tokenizer );
+        if ( self.status && !self.$msg ) self.$msg = t_err( token_izer );
         return false;
     }
 
     else if ( T_LOOKAHEAD & type )
     {
-        tokenizer = t_clone( tokens[ 0 ], 1, modifier, $id );
-        style = tokenize( tokenizer, stream, state, token );
-        if ( stream.pos > stream_pos ) stream.bck( stream_pos );
-        if ( stack.length > stack_pos ) stack.length = stack_pos;
+        // not supported, return success as default
+        if ( T_SUBGRAMMAR & tokens[ 0 ].type ) return true;
+        backup = state_backup( state, stream, null, false );
+        style = tokenize( t_clone( tokens[ 0 ], 0 ), stream, state, token );
+        state_backup( state, stream, backup );
         return T_NEGATIVE_LOOKAHEAD === type ? false === style : false !== style;
     }
 
@@ -819,10 +863,11 @@ function t_composite( t, stream, state, token )
         self.status = 0;
         err = [];
         
+        backup = state_backup( state, stream );
         for (i=0; i<n; i++)
         {
-            tokenizer = t_clone( tokens[ i ], 1, modifier, $id );
-            style = tokenize( tokenizer, stream, state, token );
+            token_izer = t_clone( tokens[ i ], 1, modifier, $id );
+            style = tokenize( token_izer, stream, state, token );
             
             if ( false !== style )
             {
@@ -837,15 +882,14 @@ function t_composite( t, stream, state, token )
                 }
                 break;
             }
-            else if ( tokenizer.status & REQUIRED )
+            else if ( token_izer.status & REQUIRED )
             {
                 tokens_required++;
-                err.push( t_err( tokenizer ) );
+                err.push( t_err( token_izer ) );
             }
-            if ( tokenizer.status & ERROR )
+            if ( token_izer.status & ERROR )
             {
-                if ( stream.pos > stream_pos ) stream.bck( stream_pos );
-                if ( stack.length > stack_pos ) stack.length = stack_pos;
+                state_backup( state, stream, backup );
             }
         }
         

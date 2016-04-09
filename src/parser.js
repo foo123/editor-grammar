@@ -16,6 +16,7 @@ function State( unique, s )
         self.stack = s.stack.slice();
         self.token = s.token;
         self.block = s.block;
+        self.outer = s.outer;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -42,6 +43,7 @@ function State( unique, s )
         self.stack = [];
         self.token = null;
         self.block = null;
+        self.outer = null;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -66,6 +68,30 @@ function State( unique, s )
     };
 }
 
+function state_backup( state, stream, backup, with_errors )
+{
+    if ( backup )
+    {
+        state.status = backup[0];
+        state.block = backup[1];
+        state.outer = backup[2];
+        if ( state.stack.length > backup[3] ) state.stack.length = backup[3];
+        if ( stream && (stream.pos > backup[4]) ) stream.bck(backup[4]);
+    }
+    else
+    {
+        backup = [
+            state.status,
+            state.block,
+            state.outer,
+            state.stack.length,
+            stream ? stream.pos : Infinity
+        ];
+        if ( false === with_errors ) state.status = 0;
+        return backup;
+    }
+}
+
 function state_dispose( state )
 {
     state.id = null;
@@ -75,6 +101,7 @@ function state_dispose( state )
     state.stack = null;
     state.token = null;
     state.block = null;
+    state.outer = null;
     state.queu = null;
     state.symb = null;
     state.ctx = null;
@@ -197,30 +224,36 @@ var Parser = Class({
         self.$DEF = DEFAULT || null; self.$ERR = ERROR || null;
         self.DEF = self.$DEF; self.ERR = self.$ERR;
         self.$folders = [];
+        self.$matchers = [];
+        self.$subgrammars = {};
     }
     
     ,$grammar: null
+    ,$subgrammars: null
     ,$folders: null
+    ,$matchers: null
     ,$n$: 'name', $t$: 'type', $v$: 'token'
     ,$DEF: null, $ERR: null
     ,DEF: null, ERR: null
     
     ,dispose: function( ) {
         var self = this;
-        self.$grammar = null;
-        self.$folders = null;
+        self.$grammar = self.$subgrammars = null;
+        self.$folders = self.$matchers = null;
         self.$n$ = self.$t$ = self.$v$ = null;
         self.$DEF = self.$ERR = self.DEF = self.ERR = null;
         return self;
     }
     
-    ,token: function( stream, state ) {
+    ,token: function( stream, state, inner ) {
         var self = this, grammar = self.$grammar, Style = grammar.Style, DEFAULT = self.DEF, ERR = self.ERR,
             T = { }, $name$ = self.$n$, $type$ = self.$t$, $value$ = self.$v$, //$pos$ = 'pos',
             interleaved_tokens = grammar.$interleaved, tokens = grammar.$parser, 
             nTokens = tokens.length, niTokens = interleaved_tokens ? interleaved_tokens.length : 0,
             tokenizer, action, token, stack, line, pos, i, ii, stream_pos, stack_pos,
-            type, err, notfound, just_space, block_in_progress
+            type, err, notfound, just_space, block_in_progress, outer = state.outer,
+            subgrammar, innerParser, innerState,
+            outerState = outer && outer[2], outerTokenizer = outer && outer[1]
         ;
         
         // state marks a new line
@@ -237,18 +270,103 @@ var Parser = Class({
         state.$actionerr$ = false; state.token = null;
         stack = state.stack; line = state.line; pos = stream.pos;
         type = false; notfound = true; err = false; just_space = false;
-        block_in_progress = state.block ? state.block.name : undef;
+        //block_in_progress = state.block ? state.block.name : undef;
+        
+        if ( outer && (self === outer[0]) )
+        {
+            // use self mode as default passthru INNER mode
+            T[$name$] = null; T[$type$] = DEFAULT; T[$value$] = null;
+            // check if need to dispatch back to outer parser
+            if ( outerTokenizer )
+            {
+                token = new s_token( );
+                if ( tokenize( outerTokenizer, stream, outerState, token ) )
+                {
+                    //state.outer = null;
+                    return {parser: self, state: outerState};
+                }
+                else
+                {
+                    stream.nxt( 1/*true*/ );
+                }
+                while ( !stream.eol() )
+                {
+                    if ( tokenize( outerTokenizer, stream, outerState, token ) )
+                    {
+                        if ( stream.pos > pos )
+                        {
+                            // return current token first
+                            break;
+                        }
+                        else
+                        {
+                            //state.outer = null;
+                            return {parser: self, state: outerState};
+                        }
+                    }
+                    else
+                    {
+                        stream.nxt( 1/*true*/ );
+                    }
+                }
+            }
+            else
+            {
+                // pass whole line through
+                stream.spc( );
+                if ( stream.eol( ) ) just_space = true;
+                else stream.end( );
+            }
+            
+            T[$value$] = stream.cur( 1 );
+            state.$eol$ = stream.eol();
+            state.$blank$ = state.$blank$ && (just_space || state.$eol$);
+            
+            return T;
+        }
         
         // if EOL tokenizer is left on stack, pop it now
         if ( stack.length && T_EOL === stack[stack.length-1].type && stream.sol() ) stack.pop();
         
         // check for non-space tokenizer or partial-block-in-progress, before parsing any space/empty
         if ( (!stack.length 
-            || (T_NONSPACE !== stack[stack.length-1].type && block_in_progress !== stack[stack.length-1].name)) 
+            || ((T_NONSPACE !== stack[stack.length-1].type) && (null == state.block) /*(block_in_progress !== stack[stack.length-1].name)*/)) 
             && stream.spc() )
         {
-            notfound = false;
-            just_space = true;
+            // subgrammar follows, push the spaces back and let subgrammar handle them
+            if ( stack.length && (T_SUBGRAMMAR === stack[stack.length-1].type) )
+            {
+                stream.bck( pos );
+                tokenizer = stack.pop();
+                type = tokenize( tokenizer, stream, state, token );
+                // subgrammar / submode
+                /*if ( type.subgrammar )
+                {*/
+                // dispatch to inner mode
+                subgrammar = ''+type;
+                if ( !self.$subgrammars[subgrammar] )
+                {
+                    // use self as default passthru inner mode
+                    innerParser = self;
+                    innerState = new State( );
+                    outerState = new State( 1, state );
+                }
+                else
+                {
+                    // use actual inner mode
+                    innerParser = self.$subgrammars[subgrammar];
+                    innerState = new State( 1, inner[subgrammar] ? inner[subgrammar] : state.status );
+                    outerState = new State( 1, state );
+                }
+                innerState.outer = [self, type.next, outerState];
+                return {parser: innerParser, state: innerState, toInner: subgrammar};
+                /*}*/
+            }
+            else
+            {
+                notfound = false;
+                just_space = true;
+            }
         }
         
         T[$name$] = null; T[$type$] = DEFAULT; T[$value$] = null;
@@ -260,6 +378,29 @@ var Parser = Class({
             while ( notfound && (stack.length || i<nTokens) && !stream.eol() )
             {
                 stream_pos = stream.pos; stack_pos = stack.length;
+                // check for outer parser interleaved
+                if ( outerTokenizer )
+                {
+                    stream.spc( );
+                    if ( tokenize( outerTokenizer, stream, outerState, token ) )
+                    {
+                        if ( stream.pos > stream_pos )
+                        {
+                            // match the spaces first
+                            T[$value$] = stream.cur( 1 );
+                            state.$eol$ = stream.eol();
+                            state.$blank$ = state.$blank$ && (true || state.$eol$);
+                            return T;
+                        }
+                        else
+                        {
+                            // dispatch back to outer parser
+                            //state.outer = null;
+                            return {parser: outer[0], state: outerState, fromInner: state};
+                        }
+                    }
+                    stream.bck( stream_pos );
+                }
                 // dont interleave tokens if partial block is in progress
                 if ( niTokens && !state.block )
                 {
@@ -303,6 +444,29 @@ var Parser = Class({
                 // found token
                 else
                 {
+                    // subgrammar inner parser
+                    if ( type.subgrammar )
+                    {
+                        // dispatch to inner sub-parser
+                        subgrammar = ''+type;
+                        if ( !self.$subgrammars[subgrammar] )
+                        {
+                            // use self as default passthru inner parser
+                            innerParser = self;
+                            innerState = new State( );
+                            outerState = new State( 1, state );
+                        }
+                        else
+                        {
+                            // use actual inner sub-grammar parser
+                            innerParser = self.$subgrammars[subgrammar];
+                            innerState = new State( 1, inner[subgrammar] ? inner[subgrammar] : state.status );
+                            outerState = new State( 1, state );
+                        }
+                        innerState.outer = [self, type.next, outerState];
+                        return {parser: innerParser, state: innerState, toInner: subgrammar};
+                    }
+                    
                     // partial block, apply maybe any action(s) following it
                     if ( stack.length > 1 && stream.eol() &&  
                         (T_BLOCK & stack[stack.length-1].type) && state.block &&
@@ -335,8 +499,20 @@ var Parser = Class({
         }
         
         
-        // unknown, bypass, next char/token
-        if ( notfound )  stream.nxt( 1/*true*/ ) /*|| stream.spc( )*/;
+        // unknown
+        if ( notfound )
+        {
+            // check for outer parser
+            if ( outerTokenizer && tokenize( outerTokenizer, stream, outerState, token ) )
+            {
+                // dispatch back to outer parser
+                //state.outer = null;
+                return {parser: outer[0], state: outerState, fromInner: state};
+            }
+            
+            // unknown, bypass, next char/token
+            stream.nxt( 1/*true*/ ) /*|| stream.spc( )*/;
+        }
         
         T[$value$] = stream.cur( 1 );
         if ( false !== type )
@@ -363,6 +539,93 @@ var Parser = Class({
         return T;
     }
     
+    // get token via multiplexing inner grammars if needed
+    ,get: function( stream, mode ) {
+        var ret = mode.parser.token( stream, mode.state, mode.inner );
+        while ( ret && ret.parser )
+        {
+            // multiplex inner grammar/parser/state if given
+            // save inner parser current state
+            if ( ret.fromInner && (mode.parser !== ret.parser) )
+            {
+                mode.state.err = ret.fromInner.err;
+                if ( mode.name ) mode.inner[mode.name] = ret.fromInner;
+            }
+            // share some state
+            ret.state.err = mode.state.err;
+            ret.state.line = mode.state.line;
+            ret.state.bline = mode.state.bline;
+            ret.state.$blank$ = mode.state.$blank$;
+            ret.state.$eol$ = mode.state.$eol$;
+            ret.state.$full_parse$ = mode.state.$full_parse$;
+            // update parser to current parser and associated state
+            mode.state = ret.state;
+            mode.parser = ret.parser;
+            mode.name = ret.toInner;
+            // get new token
+            ret = mode.parser.get( stream, mode );
+        }
+        // return token
+        return ret;
+    }
+    
+    ,tokenize: function( stream, mode, row ) {
+        var tokens = [];
+        //mode.state.line = row || 0;
+        if ( stream.eol() ) { mode.state.line++; if ( mode.state.$blank$ ) mode.state.bline++; }
+        else while ( !stream.eol() ) tokens.push( mode.parser.get( stream, mode ) );
+        return tokens;
+    }
+    
+    ,parse: function( code, parse_type ) {
+        var lines = (code||"").split(newline_re), l = lines.length,
+            linetokens = null, state, mode, parse_errors, parse_tokens, err, ret;
+        
+        parse_type = parse_type || TOKENS;
+        parse_errors = !!(parse_type & ERRORS);
+        parse_tokens = !!(parse_type & TOKENS);
+        mode = {parser: this, state: new State( 0, parse_type ), inner: {}};
+        mode.state.$full_parse$ = true;
+        
+        // add back the newlines removed from split-ting
+        iterate(function( i ){ lines[i] += "\n"; }, 0, l-2);
+        
+        if ( parse_tokens ) 
+            linetokens = iterate(parse_type & FLAT
+            ? function( i, linetokens ) {
+                linetokens._ = linetokens._.concat( mode.parser.tokenize( Stream( lines[i] ), mode, i ) );
+            }
+            : function( i, linetokens ) {
+                linetokens._.push( mode.parser.tokenize( Stream( lines[i] ), mode, i ) );
+            }, 0, l-1, {_:[]} )._;
+        
+        else 
+            iterate(function( i ) {
+                var stream = Stream( lines[i] );
+                if ( stream.eol() ) { mode.state.line++; if ( mode.state.$blank$ ) mode.state.bline++; }
+                else while ( !stream.eol() ) mode.parser.get( stream, mode );
+            }, 0, l-1);
+        
+        state = mode.state;
+        if ( parse_errors && state.queu && state.queu.length )
+        {
+            // generate errors for unmatched tokens, if needed
+            while( state.queu.length )
+            {
+                err = state.queu.shift( );
+                error_( state, err[1], err[2], err[3], err[4], null, err[5] );
+            }
+        }
+        
+        ret = parse_tokens && parse_errors
+            ? {tokens:linetokens, errors:state.err}
+            : (parse_tokens ? linetokens : state.err);
+        
+        state_dispose( state );
+        mode = state = null;
+        return ret;
+    }
+
     ,autocompletion: function( state, min_found ) {
         var stack = state.stack, i, token, type,
             hash = {}, follows = generate_autocompletion( [ state.token ], [], hash );
@@ -384,68 +647,27 @@ var Parser = Class({
         return follows;
     }
     
-    ,tokenize: function( stream, state, row ) {
-        var self = this, tokens = [];
-        //state.line = row || 0;
-        if ( stream.eol() ) { state.line++; if ( state.$blank$ ) state.bline++; }
-        else while ( !stream.eol() ) tokens.push( self.token( stream, state ) );
-        return tokens;
-    }
-    
-    ,parse: function( code, parse_type ) {
-        var self = this, lines = (code||"").split(newline_re), l = lines.length,
-            linetokens = null, state, parse_errors, parse_tokens, err, ret;
-        
-        parse_type = parse_type || TOKENS;
-        parse_errors = !!(parse_type & ERRORS);
-        parse_tokens = !!(parse_type & TOKENS);
-        state = new State( 0, parse_type );
-        state.$full_parse$ = true;
-        
-        // add back the newlines removed from split-ting
-        iterate(function( i ){ lines[i] += "\n"; }, 0, l-2);
-        
-        if ( parse_tokens ) 
-            linetokens = iterate(parse_type & FLAT
-            ? function( i, linetokens ) {
-                linetokens._ = linetokens._.concat( self.tokenize( Stream( lines[i] ), state, i ) );
-            }
-            : function( i, linetokens ) {
-                linetokens._.push( self.tokenize( Stream( lines[i] ), state, i ) );
-            }, 0, l-1, {_:[]} )._;
-        
-        else 
-            iterate(function( i ) {
-                var stream = Stream( lines[i] );
-                //state.line = i;
-                if ( stream.eol() ) { state.line++; if ( state.$blank$ ) state.bline++; }
-                else while ( !stream.eol() ) self.token( stream, state );
-            }, 0, l-1);
-        
-        
-        if ( parse_errors && state.queu && state.queu.length )
-        {
-            // generate errors for unmatched tokens, if needed
-            while( state.queu.length )
-            {
-                err = state.queu.shift( );
-                error_( state, err[1], err[2], err[3], err[4], null, err[5] );
-            }
-        }
-        
-        ret = parse_tokens && parse_errors
-            ? {tokens:linetokens, errors:state.err}
-            : (parse_tokens ? linetokens : state.err);
-        
-        state_dispose( state );
-        return ret;
-    }
-
     // overriden
+    ,subparser: function( name, parser ) {
+        var self = this;
+        if ( false === parser )
+        {
+            // remove
+            if ( self.$subgrammars[HAS](name) )
+                delete self.$subgrammars[name];
+        }
+        else if ( parser )
+        {
+            // add
+            self.$subgrammars[name] = parser;
+        }
+        return self;
+    }
     ,iterator: function( ) { }
     ,validate: function( ) { }
     ,autocomplete: function( ) { }
     ,indent: function( ) { }
     ,fold: function( ) { }
+    ,match: function( ) { }
 });
 

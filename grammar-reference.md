@@ -7,8 +7,10 @@
 
 * [Extra Settings](#extra-settings)
     1. [Code Folding **(new, optional)**](#code-folding)
+    2. [Code Matching **(new, optional)**](#code-matching)
 * [Style Model](#style-model)
 * [Fold Model **(not available)**](#fold-model)
+* [Match Model **(not available)**](#match-model)
 * [Lexical Model](#lexical-model)
     1. [Simple Tokens](#simple-tokens)
     2. [Block Tokens](#block-tokens)
@@ -60,9 +62,13 @@ Add a `fold` type in the `Grammar.Extra."fold"` option.
 
 **Generic Folding Types supported:**
 
-* `"brace"` / `"cstyle"` , folds on braces (i.e `{}`) and brackets (i.e `[]`)
+* *custom string*, folds on custom delimiters separated by comma e.g `"<[,]>"`
+* `"braces"`, folds on braces i.e `{`,`}` (alias of `"{,}"`)
+* `"brackets"`, folds on brackets i.e `[`,`]` (alias of `"[,]"`)
+* `"parens"` / `"parentheses"`, folds on parentheses i.e `(`,`)` (alias of `"(,)"`)
+* `"brace"` / `"cstyle"` / `"c"`, folds on braces (i.e `{}`) and brackets (i.e `[]`) (alias of `"{,}+[,]"`)
 * `"indent"` / `"indentation"` , folds on blocks delimited by same indentation (e.g as in `python`)
-* `"markup"` / `"xml"` / `"html"` , folds based on `xml`/`markup` tags and `CDATA` blocks
+* `"tags"` / `"markup"` / `"xml"` / `"html"` , folds based on `xml`/`markup` tags and `CDATA` blocks
 * **NOTE** folding `"block"`-type comments, if existing and defined as such, is done automaticaly, no need to add separate folder option
 
 
@@ -74,11 +80,45 @@ For example:
 ```javascript
 "Extra"         : {
     // combine multiple code folders in order by "+",
-    // here both indentation-based and brace-based (each one will apply where applicable, in the order specified)
-    "fold"      : "indentation+brace"
+    // here both brace-based and tag-based (each one will apply where applicable, in the order specified)
+    "fold"      : "braces+brackets+parens+tags"
 }
 ```
 
+
+
+####Code Matching
+**(new, optional)**
+
+Generic, editor-independent, code token matching functionality is supported (by generic matchers implementations).
+
+Add a `match` type in the `Grammar.Extra."match"` option.
+
+**Note** If `match` setting is not given, `match` takes analogous settings to `fold` settings (if set)
+
+
+**Generic Matching Types supported:**
+
+* *custom string*, matches custom delimiters separated by comma e.g `"<[,]>"`
+* `"braces"`, matches braces i.e `{`,`}` (alias of `"{,}"`)
+* `"brackets"`, matches brackets i.e `[`,`]` (alias of `"[,]"`)
+* `"parens"` / `"parentheses"`, matches parentheses i.e `(`,`)` (alias of `"(,)"`)
+* `"brace"` / `"cstyle"` / `"c"` , matches braces (i.e `{}`), brackets (i.e `[]`) and parentheses (i.e `()`) (alias of `"{,}+[,]+(,)"`)
+* `"tags"` / `"markup"` / `"xml"` / `"html"` , matches `xml`/`markup` tags
+
+
+**NOTE** One may use multiple different code-token-matchers, combined with `+` operator.
+
+
+For example:
+
+```javascript
+"Extra"         : {
+    // combine multiple token matchers in order by "+",
+    // here both custom and brace-based (each one will apply where applicable, in the order specified)
+    "match"      : "<[,]>+braces+brackets+parens"
+}
+```
 
 
 ###Style Model
@@ -89,13 +129,18 @@ For example:
 
 
 
-
 ###Fold Model
 **(not available)**
 
 In future, support a parametrisable `Grammar.Fold` Model which can parametrise code folders
 for user-defined custom code folding (see [above](#code-folding)).
 
+
+###Match Model
+**(not available)**
+
+In future, support a parametrisable `Grammar.Match` Model which can parametrise code token matchers
+for user-defined custom code token matching (see [above](#code-matching)).
 
 
 
@@ -309,6 +354,33 @@ Lexical tokens can annotate their `type` in their `token_id` as `"token_id:token
     6. `"type":"sequence"`,  match all the tokens in sequence (analogous to a regex: `(t1 t2 t3 ..)` , where `t1`, `t2`, etc are also composite tokens) else error
     7. `"type":"positiveLookahead"`,  try to match the token without consuming the token and return whether succesful or not
     8. `"type":"negativeLookahead"`,  try to match the token without consuming the token and return whether failed or not
+
+
+* a `"subgrammar"` or `"grammar"` syntax token type, **represents a reference to another (external) grammar** to be used as sub-grammar inside **this current grammar** (**new feature, experimental**). For example an `html` grammar can make use of `css` and `javascript` sub-grammars in special places inside the whole grammar, like below (see test examples for further info)
+
+```javascript
+// other Syntax definitions..
+
+    /* token name to be used inside THIS grammar */
+    "javascript"    : {
+        /* the external grammar reference name, here it is the same as the token name */
+        "subgrammar":"javascript"
+    },
+    
+    "tag_attribute" : "attribute '=' (string | number)",
+    
+    /* here `javascript` refers to the token name, NOT the sub-grammar name, although in this case they are the same */
+    "script_tag"    : "'<script'.tag tag_attribute* '>'.tag javascript '</script>'.tag",
+    
+    "other_tag"     : "tag_open | tag_close | text",
+    
+    "tag"           : "script_tag | other_tag",
+    
+    "html"          : "tags*"
+
+// other Syntax definitions..
+```
+This way **multiple grammars can be combined and multiplexed** easily and intuitively. **Note** another way to combine grammars is to actualy merge all needed grammars in a single grammar specification (this can also be useful, but more tedious)
 
 * a syntax token can contain (direct or indirect) `recursive references` to itself ( **note:** some rule factoring may be needed, to avoid grammar `left-recursion` or `ambiguity` )
 
@@ -552,8 +624,8 @@ For example (see above):
 * handle arbitrary, user-defined, toggle comments and keyword autocompletion functionality (achieved by semanticaly annotating language `comments` and `keywords`)
 * handle arbitrary, user-defined, lint-like syntax-annotation functionality (achieved by modeling language `syntax` analysis except strictly `lexical` analysis, in-context)
 * handle arbitrary, user-defined, code `folding` (e.g via `fold action` token or via a `Fold` Model, see above)
+* handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) (e.g via `match action` token or via a `Match` Model, see above)
 * handle arbitrary, user-defined, code `(out-)indentation` (e.g via `indent action` token or via an `Indentation` Model)
-* handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) via `match action` token
 * handle arbitrary, user-defined, dynamic contexts via `context action` token
 * handle arbitrary, user-defined, unique identifiers via `unique action` token
 * handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token

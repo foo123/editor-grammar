@@ -33,6 +33,33 @@ function next_tag( iter, T, M, L, R, S )
     }
 }
 
+/*function prev_tag( iter, T, M, L, R, S )
+{
+    var gt, lastSlash, selfClose, type;
+    for (;;)
+    {
+        gt = iter.col ? iter.text.lastIndexOf( R, iter.col - 1 ) : -1;
+        if ( -1 === gt )
+        {
+            if ( iter.prev( ) )
+            {
+                iter.text = iter.line( iter.row );
+                continue;
+            }
+            else return;
+        }
+        if ( !T( iter.token(iter.row, gt + 1) ) )
+        {
+            iter.col = gt;
+            continue;
+        }
+        lastSlash = iter.text.lastIndexOf( S, gt );
+        selfClose = lastSlash > -1 && !Stream.$NOTEMPTY$.test(iter.text.slice(lastSlash + 1, gt));
+        iter.col = gt + 1;
+        return selfClose ? "selfClose" : "regular";
+    }
+}*/
+
 function end_tag( iter, T, M, L, R, S )
 {
     var gt, lastSlash, selfClose, type;
@@ -57,6 +84,103 @@ function end_tag( iter, T, M, L, R, S )
         selfClose = lastSlash > -1 && !Stream.$NOTEMPTY$.test(iter.text.slice(lastSlash + 1, gt));
         iter.col = gt + 1;
         return selfClose ? "autoclosed" : "regular";
+    }
+}
+
+/*function start_tag( iter, T, M, L, R, S )
+{
+    var lt;
+    for (;;)
+    {
+        lt = iter.col ? iter.text.lastIndexOf( L, iter.col - 1 ) : -1;
+        if ( -1 === lt )
+        {
+            if ( iter.prev( ) )
+            {
+                iter.text = iter.line(  iter.row );
+                continue;
+            }
+            else return;
+        }
+        if ( !T( iter.token(iter.row, lt+1) ) )
+        {
+            iter.col = lt + 1;
+            continue;
+        }
+        M.lastIndex = lt;
+        iter.col = lt + 1;
+        var found = M.exec( iter.text );
+        if ( found && lt === found.index ) return found;
+    }
+}*/
+
+function find_match( dir, iter, row, col, tokenType, S, E, T, folding, commentType )
+{
+    if ( -1 === dir ) // find start
+    {
+        var depth = 1, firstLine = iter.first(), i, text, tl, pos,
+            nextOpen, nextClose, row0, col0, Sl = S.length, El = E.length,
+            unconditional = false === tokenType;
+        outer0: for (i=row; i>=firstLine; --i)
+        {
+            text = iter.line( i ); tl = text.length;
+            pos = i===row ? col-1 : tl;
+            do{
+                if ( pos < 0 ) break;
+                nextOpen = text.lastIndexOf( S, pos );
+                nextClose = text.lastIndexOf( E, pos );
+                if ( (0 > nextOpen) && (0 > nextClose) ) break;
+                pos = MAX( nextOpen, nextClose );
+                // NOTE: token can fail on some lines that continue e.g blocks
+                // since the previous line will have ended the block
+                // and the position of the new end delimiter will NOT be recognised as in the block
+                // FIXED partialy by semantic iunformation about comments, since this occurs mostly in comment delims
+                if ( unconditional || commentType || (iter.token(i, pos+1) == tokenType) )
+                {
+                    if ( pos === nextClose ) ++depth;
+                    else if ( 0 === --depth ) { row0 = i; col0 = pos; break outer0; }
+                }
+                --pos;
+            }while(true);
+        }
+        // found but failed
+        if ( (null == row0) || (folding && (row0 === row) && (col0 === col)) ) return false;
+        // found
+        return [row0, col0, row, col];
+    }
+    else //if ( 1 === dir ) // find end
+    {
+        var depth = 1, lastLine = iter.last(), i, text, tl, pos,
+            nextOpen, nextClose, row1, col1, Sl = S.length, El = E.length,
+            unconditional = false === tokenType;
+        outer1: for (i=row; i<=lastLine; ++i)
+        {
+            text = iter.line( i ); tl = text.length;
+            pos = i===row ? col : 0;
+            do{
+                if ( pos >= tl ) break;
+                nextOpen = text.indexOf( S, pos );
+                nextClose = text.indexOf( E, pos );
+                if ( (0 > nextOpen) && (0 > nextClose) ) break;
+                if ( 0 > nextOpen ) nextOpen = tl;
+                if ( 0 > nextClose ) nextClose = tl;
+                pos = MIN( nextOpen, nextClose );
+                // NOTE: token can fail on some lines that continue e.g blocks
+                // since the previous line will have ended the block
+                // and the position of the new end delimiter will NOT be recognised as in the block
+                // FIXED partialy by semantic iunformation about comments, since this occurs mostly in comment delims
+                if ( unconditional || commentType || (iter.token(i, pos+1) == tokenType) )
+                {
+                    if ( pos === nextOpen ) ++depth;
+                    else if ( 0 === --depth ) { row1 = i; col1 = pos; break outer1; }
+                }
+                ++pos;
+            }while(true);
+        }
+        // found but failed
+        if ( (null == row1) || (folding && (row === row1) && (col1 === col)) ) return false;
+        // found
+        return [row, col, row1, col1];
     }
 }
 
@@ -102,17 +226,17 @@ var Folder = {
             }
             // return a range
             if ( last_line_in_fold ) return [start_line, start_pos, last_line_in_fold, end_pos];
+            //return false;
         };
     }
 
-    ,Delimited: function( S, E, T ) {
-        if ( !S || !E ) return function( ){ };
+    ,Delimited: function( S, E, T, commentType ) {
+        if ( !S || !E || !S.length || !E.length ) return function( ){ };
         T = T || TRUE;
 
         return function fold_delimiter( iter ) {
             var line = iter.row, col = iter.col,
-                lineText, startCh, at, pass, found, tokenType,
-                depth, lastLine, end, endCh, i, text, pos, nextOpen, nextClose;
+                lineText, startCh, at, pass, found, tokenType;
             
             lineText = iter.line( line );
             for (at=col,pass=0 ;;)
@@ -120,11 +244,13 @@ var Folder = {
                 var found = at<=0 ? -1 : lineText.lastIndexOf( S, at-1 );
                 if ( -1 === found )
                 {
+                    // not found
                     if ( 1 === pass ) return;
                     pass = 1;
                     at = lineText.length;
                     continue;
                 }
+                // not found
                 if ( 1 === pass && found < col ) return;
                 if ( T( tokenType = iter.token( line, found+1 ) ) )
                 {
@@ -133,28 +259,8 @@ var Folder = {
                 }
                 at = found-1;
             }
-            depth = 1; lastLine = iter.last();
-            outer: for (i=line; i<=lastLine; ++i)
-            {
-                text = iter.line( i ); pos = i===line ? startCh : 0;
-                for (;;)
-                {
-                    nextOpen = text.indexOf( S, pos );
-                    nextClose = text.indexOf( E, pos );
-                    if ( nextOpen < 0 ) nextOpen = text.length;
-                    if ( nextClose < 0 ) nextClose = text.length;
-                    pos = MIN( nextOpen, nextClose );
-                    if ( pos >= text.length ) break;
-                    if ( iter.token(i, pos+1) == tokenType )
-                    {
-                        if ( pos === nextOpen ) ++depth;
-                        else if ( !--depth ) { end = i; endCh = pos; break outer; }
-                    }
-                    ++pos;
-                }
-            }
-            if ( null == end || (line === end && endCh === startCh) ) return;
-            return [line, startCh, end, endCh];
+            // find end match
+            return find_match(1, iter, line, startCh, tokenType, S, E, T, true, commentType);
         };
     }
     
@@ -171,6 +277,7 @@ var Folder = {
             for (;;)
             {
                 openTag = next_tag(iter, T, M, L, R, S);
+                // not found
                 if ( !openTag || iter.row !== startLine || !(end = end_tag(iter, T, M, L, R, S)) ) return;
                 if ( !openTag[1] && "autoclosed" !== end  )
                 {
@@ -181,7 +288,8 @@ var Folder = {
                     {
                         next = next_tag(iter, T, M, L, R, S);
                         startLine = iter.row; startCh = iter.col - (next ? next[0].length : 0);
-                        if ( !next || !(end = end_tag(iter, T, M, L, R, S)) ) return;
+                        // found but failed
+                        if ( !next || !(end = end_tag(iter, T, M, L, R, S)) ) return false;
                         if ( "autoclosed" === end  ) continue;
                         if ( next[1] )
                         {
@@ -201,6 +309,7 @@ var Folder = {
                                     pos: [startLine, startCh, iter.row, iter.col]
                                 };
                                 break;*/
+                                // found
                                 return [start[0], start[1], startLine, startCh];
                             }
                         }
@@ -222,3 +331,68 @@ var Folder = {
 
 };
 
+
+// token matching factories
+var Matcher = {
+    // adapted from ace
+    
+     Pattern: function( S, E, T ) {
+        // TODO
+        return function( ){ };
+    }
+    
+     ,Delimited: function( S, E, T, commentType ) {
+        if ( !S || !E || !S.length || !E.length ) return function( ){ };
+        T = T || TRUE;
+        
+        return function( iter ) {
+            var col = iter.col, row = iter.row, line = iter.line( row ),
+                range, tokenType=false, Sl = S.length, El = E.length;
+            if ( (col >= Sl) && 
+                ((1 === Sl && S === line.charAt(col-1)) || (S === line.slice(col-Sl, col))) /*&& 
+                T( tokenType = iter.token( row, col-Sl ) )*/
+            )
+            {
+                // find end
+                range = find_match(1, iter, row, col, tokenType, S, E, T, false, commentType);
+                if ( range )
+                {
+                    range = [range[0], range[1]-Sl, range[0], range[1], range[2], range[3], range[2], range[3]+El];
+                    range.match = 'end';
+                }
+                else
+                {
+                    range = [row, col-Sl, row, col];
+                    range.match = false;
+                }
+                return range;
+            }
+            else if ( (col >= El) && 
+                ((1 === El && E === line.charAt(col-1)) || (E === line.slice(col-El, col))) /*&& 
+                T( tokenType = iter.token( row, col-El ) )*/
+            )
+            {
+                // find start
+                range = find_match(-1, iter, row, col-El, tokenType, S, E, T, false, commentType);
+                if ( range )
+                {
+                    range = [range[0], range[1], range[0], range[1]+Sl, range[2], range[3], range[2], range[3]+El];
+                    range.match = 'start';
+                }
+                else
+                {
+                    range = [row, col-El, row, col];
+                    range.match = false;
+                }
+                return range;
+            }
+            // not found
+        };
+    }
+    
+    ,MarkedUp: function( T, L, R, S, M ) {
+        // TODO
+        return function( ){ };
+    }
+     
+};
