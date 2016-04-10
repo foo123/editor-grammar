@@ -248,7 +248,7 @@ function get_simplematcher( name, pattern, key, cachedMatchers )
     return cachedMatchers[ name ] = mtcher;
 }
 
-function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive, cachedRegexes, cachedMatchers ) 
+function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive, cachedRegexes, cachedMatchers, ret_keywords ) 
 {
     if ( cachedMatchers[ name ] ) return cachedMatchers[ name ];
     
@@ -297,6 +297,7 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
         }
         else if ( combine && !(array_of_arrays || has_regexs) )
         {   
+            if ( ret_keywords ) ret_keywords.keywords = make_array( tokens ).slice( );
             mtcher = get_simplematcher( name, get_combined_re( tmp, combined, caseInsensitive ), 0, cachedMatchers );
         }
         else if ( array_of_arrays || has_regexs )
@@ -313,6 +314,7 @@ function get_compositematcher( name, tokens, RegExpID, combined, caseInsensitive
         }
         else /* strings */
         {
+            if ( ret_keywords ) ret_keywords.keywords = make_array( tokens ).slice( );
             tmp = tmp.sort( by_length );
             for (i=0; i<l; i++)
             {
@@ -1437,13 +1439,15 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
                 autocompletions = null;
             }
             
+            var kws = {};
             // combine by default if possible using default word-boundary delimiter
             combine = 'undefined' !== typeof token.combine ? token.combine : (T_ARRAY&get_type(token.tokens) ? true : false);
             $token$ = new tokenizer( T_SIMPLE, tokenID,
                         get_compositematcher( tokenID, $tokens$.slice(), RegExpID, combine,
-                        !!(token.caseInsensitive||token.ci), cachedRegexes, cachedMatchers ), 
+                        !!(token.caseInsensitive||token.ci), cachedRegexes, cachedMatchers, kws ), 
                         $msg$, $modifier$, null, autocompletions
                     );
+            if ( kws.keywords ) $token$.keywords = kws.keywords.join('|');
             // pre-cache tokenizer to handle recursive calls to same tokenizer
             cachedTokens[ tokenID ] = $token$;
             

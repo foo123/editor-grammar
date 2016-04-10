@@ -326,7 +326,7 @@ var Parser = Class({
         }
         
         // if EOL tokenizer is left on stack, pop it now
-        if ( stack.length && T_EOL === stack[stack.length-1].type && stream.sol() ) stack.pop();
+        if ( stack.length && (T_EOL === stack[stack.length-1].type) && stream.sol() ) stack.pop();
         
         // check for non-space tokenizer or partial-block-in-progress, before parsing any space/empty
         if ( (!stack.length 
@@ -426,10 +426,10 @@ var Parser = Class({
                     {
                         // keep it for autocompletion, if needed
                         state.token = tokenizer;
-                        // empty the stack of the syntax rule group of this tokenizer
-                        empty( stack, tokenizer.$id /*|| true*/ );
-                        // skip this
-                        if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
+                        
+                        // error recovery to a valid parse state and stream position, if any
+                        just_space = err_recover( state, stream, token, tokenizer ) || just_space;
+                        
                         // generate error
                         err = true; notfound = false; break;
                     }

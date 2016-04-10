@@ -302,36 +302,6 @@ function has_prefix( s, p )
     );
 }
 
-function push_at( stack, pos, token )
-{
-    if ( pos < stack.length ) stack.splice( pos, 0, token );
-    else stack.push( token );
-    return stack;
-}
-
-function empty( stack, $id )
-{
-    // http://dvolvr.davidwaterston.com/2013/06/09/restating-the-obvious-the-fastest-way-to-truncate-an-array-in-javascript/
-    var count = 0, total = stack.length;
-    if ( true === $id )
-    {
-        // empty whole stack
-        stack.length =  0;
-    }
-    else if ( $id )
-    {
-        // empty only entries associated to $id
-        while ( count < total && /*stack[total-count-1] &&*/ stack[total-count-1].$id === $id ) count++;
-        if ( count ) stack.length =  total-count;
-    }
-    /*else if ( count )
-    {
-        // just pop one
-        stack.length =  count-1;
-    }*/
-    return stack;
-}
-
 function del( o, p, soft )
 {
     if ( soft ) o[p] = undef; else delete o[p];

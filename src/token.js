@@ -182,7 +182,7 @@ function t_match( t, stream, eat, any_match )
     return false;
 }
 
-function tokenizer( type, name, token, msg, modifier, except, autocompletions )
+function tokenizer( type, name, token, msg, modifier, except, autocompletions, keywords )
 {
     var self = this;
     self.type = type;
@@ -191,6 +191,7 @@ function tokenizer( type, name, token, msg, modifier, except, autocompletions )
     self.modifier = modifier || null;
     self.except = except || null;
     self.autocompletions = autocompletions || null;
+    self.keywords = keywords || null;
     self.pos = null;
     self.msg = msg || null;
     self.$msg = null;
@@ -214,7 +215,7 @@ function s_token( )
 
 function t_clone( t, required, modifier, $id )
 {
-    var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier, t.except, t.autocompletions );
+    var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier, t.except, t.autocompletions, t.keywords );
     tt.ci = t.ci; tt.mline = t.mline; tt.esc = t.esc; tt.inter = t.inter;
     tt.found = t.found; tt.min = t.min; tt.max = t.max; tt.i0 = t.i0;
     if ( required ) tt.status |= REQUIRED;
@@ -230,11 +231,13 @@ function t_clone( t, required, modifier, $id )
     t.token = null;
     t.modifier = null;
     t.except = null;
+    t.autocompletions = null;
+    t.keywords = null;
     t.pos = null;
     t.msg = null; t.$msg = null;
     t.status = null;
     t.ci = null; t.mline = null; t.esc = null; t.inter = null;
-    t.found = null; t.min = null; t.max = null;
+    t.found = null; t.min = null; t.max = t.i0 = null;
     t.$id = null;
 }*/
 
@@ -245,7 +248,7 @@ function t_err( t )
         ? t.$msg
         : (
             t.status & REQUIRED
-            ? 'Token "'+T+'" Expected'
+            ? 'Token "'+T+'"'+(t.keywords?': '+t.keywords:'')+' Expected'
             : 'Syntax Error: "'+T+'"'
         );
 }
@@ -255,6 +258,101 @@ function error_( state, l1, c1, l2, c2, t, err )
     if ( state.status & ERRORS )
     state.err[ l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
     //return state;
+}
+
+function push_at( stack, pos, token )
+{
+    if ( pos < stack.length ) stack.splice( pos, 0, token );
+    else stack.push( token );
+    return stack;
+}
+
+function empty( stack, $id )
+{
+    // http://dvolvr.davidwaterston.com/2013/06/09/restating-the-obvious-the-fastest-way-to-truncate-an-array-in-javascript/
+    var count = 0, total = stack.length;
+    if ( true === $id )
+    {
+        // empty whole stack
+        stack.length =  0;
+    }
+    else if ( $id )
+    {
+        // empty only entries associated to $id
+        while ( count < total && /*stack[total-count-1] &&*/ stack[total-count-1].$id === $id ) count++;
+        if ( count ) stack.length =  total-count;
+    }
+    /*else if ( count )
+    {
+        // just pop one
+        stack.length =  count-1;
+    }*/
+    return stack;
+}
+
+function err_recover( state, stream, token, tokenizer )
+{
+    //var just_space = false;
+    // empty the stack of the syntax rule group of this tokenizer
+    //empty( stack, tokenizer.$id /*|| true*/ );
+    
+    // skip this
+    //if ( tokenizer.pos > stream.pos ) stream.pos = tokenizer.pos;
+    //else if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
+    
+    var stack = state.stack, stack_pos, stream_pos, stream_pos2, tok, i = 0, 
+        recover_stream = Infinity, recover_stack = -1;
+    stream_pos = stream.pos;
+    stream.spc( );
+    stream_pos2 = stream.pos;
+    stack_pos = stack.length;
+    if ( stream.pos < stream.length )
+    {
+        // try to recover in a state with:
+        // 1. the closest stream position that matches a tokenizer in the stack (more important)
+        // 2. and the minimum number of stack tokenizers to discard (less important)
+        while (stack_pos > i)
+        {
+            tok = stack[stack_pos-i-1];
+            if ( tok.$id !== tokenizer.$id ) break;
+            
+            while( !tokenize(tok, stream, state, token) )
+            {
+                stream.pos = tok.pos > stream.pos ? tok.pos : stream.pos+1;
+                stack.length = stack_pos;
+                if ( stream.pos >= stream.length ) break;
+            }
+            stack.length = stack_pos;
+            
+            if ( (stream.pos < stream.length) && (recover_stream > stream.pos) )
+            {
+                recover_stream = stream.pos;
+                recover_stack = stack_pos-i;
+            }
+            else if ( (recover_stream === stream.pos) && (stack_pos-i > recover_stack) )
+            {
+                recover_stream = stream.pos;
+                recover_stack = stack_pos-i;
+            }
+            
+            stream.pos = stream_pos2;
+            i++;
+        }
+        
+        if ( recover_stream < stream.length )
+        {
+            stream.pos = recover_stream;
+            stack.length = recover_stack;
+        }
+        else
+        {
+            stream.end( );
+        }
+    }
+    /*else
+    {
+    }*/
+    return (stream_pos2 >= stream_pos) && (stream.pos === stream_pos2);
 }
 
 function tokenize( t, stream, state, token )
@@ -446,8 +544,8 @@ function t_simple( t, stream, state, token, exception )
     
     self.status &= CLEAR_ERROR;
     self.$msg = exception ? null : (self.msg || null);
-    
-    if ( except )
+    self.pos = stream.pos;
+    if ( except && !exception )
     {
         backup = state_backup( state, stream );
         for(var i=0,l=except.length; i<l; i++)
@@ -456,7 +554,7 @@ function t_simple( t, stream, state, token, exception )
             // exceptions are ONLY simple tokens
             if ( self === tok_except || T_SIMPLE !== tok_except.type ) continue;
             // exception matched, backup and fail
-            if ( t_simple( tok_except, stream, state, token, 1 ) ) { state_backup( state, stream, backup ); return false; }
+            if ( t_simple( tok_except, stream, state, token, 1 ) ) { self.pos = tok_except.pos; state_backup( state, stream, backup ); return false; }
         }
     }
     // match SOF (start-of-file, first line of source)
@@ -470,7 +568,7 @@ function t_simple( t, stream, state, token, exception )
     { 
         stream.spc();
         if ( stream.eol() ) ret = tokenID;
-        else stream.bck( pos );
+        else {self.pos = stream.pos; stream.bck( pos );}
     }
     // match EMPTY token
     else if ( T_EMPTY === type ) { self.status = 0; ret = true; }
@@ -479,6 +577,7 @@ function t_simple( t, stream, state, token, exception )
     { 
         if ( (self.status & REQUIRED) && stream.spc() && !stream.eol() )
         {
+            self.pos = stream.pos;
             stream.bck( pos );
             self.status |= ERROR;
         }
@@ -534,6 +633,7 @@ function t_block( t, stream, state, token )
 
     self.status &= CLEAR_ERROR;
     self.$msg = self.msg || null;
+    self.pos = stream.pos;
     line = state.line; pos = stream.pos;
     // comments are not required tokens
     if ( T_COMMENT === type ) self.status &= CLEAR_REQUIRED;
@@ -698,6 +798,7 @@ function t_block( t, stream, state, token )
         token.T = type; token.id = block; token.type = modifier || ret;
         token.str = stream.sel(pos, stream.pos); token.match = null;
         token.pos = [line, pos, block_end_pos[0], block_end_pos[1]];
+        self.pos = stream.pos;
         
         if ( !state.block )
         {
@@ -734,9 +835,9 @@ function t_composite( t, stream, state, token )
     stack = state.stack;
     stream_pos = stream.pos;
     stack_pos = stack.length;
+    self.pos = stream.pos;
 
     tokens_required = 0; tokens_err = 0;
-    $id = self.$id || get_id( );
     
     // TODO: a better error handling and recovery method
     // it should error recover to minimum/closest state
@@ -754,6 +855,7 @@ function t_composite( t, stream, state, token )
     
     else if ( T_ALTERNATION === type )
     {
+        $id = /*self.$id ||*/ get_id( );
         self.status |= REQUIRED;
         err = [];
         backup = state_backup( state, stream );
@@ -762,6 +864,7 @@ function t_composite( t, stream, state, token )
         {
             token_izer = t_clone( tokens[ i ], 1, modifier, $id );
             style = tokenize( token_izer, stream, state, token );
+            self.pos = token_izer.pos;
             
             if ( token_izer.status & REQUIRED )
             {
@@ -800,6 +903,7 @@ function t_composite( t, stream, state, token )
     else if ( T_SEQUENCE_OR_NGRAM & type )
     {
         is_sequence = !!(type & T_SEQUENCE);
+        $id = self.$id || get_id( );
         if ( is_sequence ) self.status |= REQUIRED;
         else self.status &= CLEAR_REQUIRED;
         backup = state_backup( state, stream );
@@ -815,6 +919,7 @@ function t_composite( t, stream, state, token )
             ((false === style) && !(token_izer.status & REQUIRED/*_OR_ERROR*/))
         ));
         
+        self.pos = token_izer.pos;
         if ( false !== style )
         {
             // not empty token
@@ -858,6 +963,7 @@ function t_composite( t, stream, state, token )
 
     else //if ( T_REPEATED & type )
     {
+        $id = self.$id || get_id( );
         found = self.found; min = self.min; max = self.max;
         //self.status &= CLEAR_REQUIRED;
         self.status = 0;
@@ -868,6 +974,7 @@ function t_composite( t, stream, state, token )
         {
             token_izer = t_clone( tokens[ i ], 1, modifier, $id );
             style = tokenize( token_izer, stream, state, token );
+            self.pos = token_izer.pos;
             
             if ( false !== style )
             {
@@ -876,7 +983,7 @@ function t_composite( t, stream, state, token )
                 {
                     // push it to the stack for more
                     self.found = found;
-                    push_at( stack, stack_pos, t_clone( self, 0, 0, $id ) );
+                    push_at( stack, stack_pos, t_clone( self, 0, 0, get_id( ) ) );
                     self.found = 0;
                     return style;
                 }
