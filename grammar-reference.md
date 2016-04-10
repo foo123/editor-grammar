@@ -240,6 +240,8 @@ for user-defined custom code token matching (see [above](#code-matching)).
 * all block-type tokens can have *different styles* for `block delimiters` and `block interior` (see examples), for example having a block token with ID `"heredoc"` , the interior different style can be represented in `Style` part of grammar as `"heredoc.inside"` (make sure your token `IDs` do not accidentally match this option)
 
 
+* all block-type tokens can be empty (default). If a block must necessarily contain something (be non-empty, e.g regular expressions modeled as blocks), set the `"empty":false` flag to `false`.
+
 
 
 ####Action Tokens 

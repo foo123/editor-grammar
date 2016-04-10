@@ -196,7 +196,7 @@ function tokenizer( type, name, token, msg, modifier, except, autocompletions, k
     self.msg = msg || null;
     self.$msg = null;
     self.status = 0;
-    self.ci = false; self.mline = true; self.esc = false; self.inter = false;
+    self.empty = false; self.ci = false; self.mline = true; self.esc = false; self.inter = false;
     self.found = 0; self.min = 0; self.max = 1; self.i0 = 0;
     self.$id = null;
 }
@@ -216,7 +216,7 @@ function s_token( )
 function t_clone( t, required, modifier, $id )
 {
     var tt = new tokenizer( t.type, t.name, t.token, t.msg, t.modifier, t.except, t.autocompletions, t.keywords );
-    tt.ci = t.ci; tt.mline = t.mline; tt.esc = t.esc; tt.inter = t.inter;
+    tt.empty = t.empty; tt.ci = t.ci; tt.mline = t.mline; tt.esc = t.esc; tt.inter = t.inter;
     tt.found = t.found; tt.min = t.min; tt.max = t.max; tt.i0 = t.i0;
     if ( required ) tt.status |= REQUIRED;
     if ( modifier ) tt.modifier = modifier;
@@ -620,8 +620,9 @@ function t_block( t, stream, state, token )
         already_inside, found, ended, continued, continue_to_next_line,
         block_start_pos, block_end_pos, block_inside_pos,
         b_start = '', b_inside = '', b_inside_rest = '', b_end = '', b_block,
-        char_escaped, next, ret, is_required, $id = self.$id || block,
-        stack = state.stack, stream_pos, stream_pos0, stack_pos, line, pos, matched
+        char_escaped, next, ret, is_required, $id = self.$id || block, can_be_empty,
+        stack = state.stack, stream_pos, stream_pos0, stack_pos, line, pos, matched,
+        outer = state.outer, outerState = outer && outer[2], outerTokenizer = outer && outer[1]
     ;
 
     /*
@@ -640,7 +641,7 @@ function t_block( t, stream, state, token )
     
     is_required = self.status & REQUIRED; already_inside = 0; found = 0;
     
-    if ( state.block && state.block.name === block )
+    if ( state.block && (state.block.name === block) )
     {
         found = 1; already_inside = 1; ret = block_interior;
         block_end = state.block.end;
@@ -664,7 +665,8 @@ function t_block( t, stream, state, token )
     if ( found )
     {
         stack_pos = stack.length;
-        is_eol = T_NULL === block_end.type;
+        is_eol = T_NULL === block_end.ptype;
+        can_be_empty = is_eol || self.empty;
         
         if ( has_interior )
         {
@@ -688,7 +690,7 @@ function t_block( t, stream, state, token )
         }
         
         stream_pos = stream.pos;
-        ended = t_match( block_end, stream );
+        ended = outerTokenizer ? is_eol && stream.eol() : t_match( block_end, stream );
         continue_to_next_line = is_multiline;
         continued = 0;
         
@@ -696,10 +698,37 @@ function t_block( t, stream, state, token )
         {
             stream_pos0 = stream.pos;
             char_escaped = false;
-            if ( is_escaped || (T_CHARLIST !== block_end.ptype && T_CHAR !== block_end.ptype && T_STR !== block_end.ptype) )
+            if ( outerTokenizer || is_escaped ||
+                (T_CHARLIST !== block_end.ptype && T_CHAR !== block_end.ptype && T_STR !== block_end.ptype)
+            )
             {
                 while ( !stream.eol( ) ) 
                 {
+                    // check for outer parser interleaved
+                    if ( outerTokenizer )
+                    {
+                        if ( tokenize( outerTokenizer, stream, outerState, token ) )
+                        {
+                            if ( stream.pos > stream_pos0 )
+                            {
+                                // return any part of current block first
+                                if ( is_eol ) ended = 1;
+                                break;
+                            }
+                            else
+                            {
+                                // dispatch back to outer parser (interleaved next)
+                                return true;
+                            }
+                        }
+                        else if ( is_eol )
+                        {
+                            // EOL block, go char-by-char since outerToken might still be inside
+                            next = stream.nxt( 1 );
+                            b_inside_rest += next;
+                            continue;
+                        }
+                    }
                     stream_pos = stream.pos;
                     if ( !char_escaped && t_match(block_end, stream) ) 
                     {
@@ -730,9 +759,10 @@ function t_block( t, stream, state, token )
                         next = stream.nxt( 1 );
                         b_inside_rest += next;
                     }
-                    char_escaped = is_escaped && !char_escaped && esc_char === next;
+                    char_escaped = is_escaped && !char_escaped && (esc_char === next);
                     stream_pos = stream.pos;
                 }
+                if ( is_eol && stream.eol() ) ended = 1;
             }
             else
             {
@@ -784,6 +814,19 @@ function t_block( t, stream, state, token )
         
         b_inside += b_inside_rest;
         block_inside_pos[ 1 ] = [line, stream_pos]; block_end_pos = [line, stream.pos];
+        
+        if ( ended )
+        {
+            // block is empty, invalid block
+            if ( !can_be_empty && 
+                (block_inside_pos[0][0] === block_inside_pos[1][0]) && 
+                (block_inside_pos[0][1] === block_inside_pos[1][1])
+            )
+            {
+                state.block = null;
+                return false;
+            }
+        }
         
         if ( ended || (!continue_to_next_line && !continued) )
         {

@@ -252,7 +252,7 @@ var Parser = Class({
             nTokens = tokens.length, niTokens = interleaved_tokens ? interleaved_tokens.length : 0,
             tokenizer, action, token, stack, line, pos, i, ii, stream_pos, stack_pos,
             type, err, notfound, just_space, block_in_progress, outer = state.outer,
-            subgrammar, innerParser, innerState,
+            subgrammar, innerParser, innerState, foundInterleaved,
             outerState = outer && outer[2], outerTokenizer = outer && outer[1]
         ;
         
@@ -378,6 +378,7 @@ var Parser = Class({
             while ( notfound && (stack.length || i<nTokens) && !stream.eol() )
             {
                 stream_pos = stream.pos; stack_pos = stack.length;
+                
                 // check for outer parser interleaved
                 if ( outerTokenizer )
                 {
@@ -401,22 +402,27 @@ var Parser = Class({
                     }
                     stream.bck( stream_pos );
                 }
+                
                 // dont interleave tokens if partial block is in progress
+                foundInterleaved = false;
                 if ( niTokens && !state.block )
                 {
                     for (ii=0; ii<niTokens; ii++)
                     {
                         tokenizer = interleaved_tokens[ii];
                         type = tokenize( tokenizer, stream, state, token );
-                        if ( false !== type ) { notfound = false; break; }
+                        if ( false !== type ) { foundInterleaved = true; break; }
                     }
-                    if ( !notfound ) break;
+                    //if ( foundInterleaved || !notfound ) break;
                 }
                 
-                // seems stack and/or ngrams can ran out while inside the loop !!  ?????
-                if ( !stack.length && i>=nTokens) break;
-                tokenizer = stack.length ? stack.pop() : tokens[i++];
-                type = tokenize( tokenizer, stream, state, token );
+                if ( notfound && !foundInterleaved )
+                {
+                    // seems stack and/or ngrams can ran out while inside the loop !!  ?????
+                    if ( !stack.length && i>=nTokens) break;
+                    tokenizer = stack.length ? stack.pop() : tokens[i++];
+                    type = tokenize( tokenizer, stream, state, token );
+                }
                 
                 // match failed
                 if ( false === type )
@@ -502,6 +508,7 @@ var Parser = Class({
         // unknown
         if ( notfound )
         {
+            /*
             // check for outer parser
             if ( outerTokenizer && tokenize( outerTokenizer, stream, outerState, token ) )
             {
@@ -509,7 +516,7 @@ var Parser = Class({
                 //state.outer = null;
                 return {parser: outer[0], state: outerState, fromInner: state};
             }
-            
+            */
             // unknown, bypass, next char/token
             stream.nxt( 1/*true*/ ) /*|| stream.spc( )*/;
         }

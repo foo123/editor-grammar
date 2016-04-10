@@ -1477,7 +1477,8 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
                         get_blockmatcher( tokenID, $tokens$.slice(), RegExpID, cachedRegexes, cachedMatchers ), 
                         $msg$
                     );
-            $token$.mline = token[HAS]('multiline')?!!token.multiline:true;
+            $token$.empty = token[HAS]('empty') ? !!token.empty : true;
+            $token$.mline = token[HAS]('multiline') ? !!token.multiline : true;
             $token$.esc = token[HAS]('escape') ? token.escape : false;
             // allow block delims / block interior to have different styles
             $token$.inter = !!Style[ tokenID + '.inside' ];
