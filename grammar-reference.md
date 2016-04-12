@@ -104,7 +104,7 @@ Add a `match` type in the `Grammar.Extra."match"` option.
 * `"brackets"`, matches brackets i.e `[`,`]` (alias of `"[,]"`)
 * `"parens"` / `"parentheses"`, matches parentheses i.e `(`,`)` (alias of `"(,)"`)
 * `"brace"` / `"cstyle"` / `"c"` , matches braces (i.e `{}`), brackets (i.e `[]`) and parentheses (i.e `()`) (alias of `"{,}+[,]+(,)"`)
-* `"tags"` / `"markup"` / `"xml"` / `"html"` , matches `xml`/`markup` tags
+* `"tags"` / `"markup"` / `"xml"` / `"html"` , matches `xml`/`markup` tags (not implemented yet)
 
 
 **NOTE** One may use multiple different code-token-matchers, combined with `+` operator.
@@ -238,7 +238,6 @@ for user-defined custom code token matching (see [above](#code-matching)).
 * `"comment"` type can be *interleaved* inside other syntax sequences automatically by the parser (`"interleave": true`, token option) (the comment token should still be added in `grammar.Parser` part ), else *comment interleaving could be handled manually* in the `grammar.Syntax` part
 
 * all block-type tokens can have *different styles* for `block delimiters` and `block interior` (see examples), for example having a block token with ID `"heredoc"` , the interior different style can be represented in `Style` part of grammar as `"heredoc.inside"` (make sure your token `IDs` do not accidentally match this option)
-
 
 * all block-type tokens can be empty (default). If a block must necessarily contain something (be non-empty, e.g regular expressions modeled as blocks), set the `"empty":false` flag to `false`.
 

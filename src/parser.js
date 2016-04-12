@@ -16,7 +16,7 @@ function State( unique, s )
         self.stack = s.stack.slice();
         self.token = s.token;
         self.block = s.block;
-        self.outer = s.outer;
+        self.outer = s.outer ? [s.outer[0], s.outer[1], new State(unique, s.outer[2])] : null;
         // keep extra state only if error handling is enabled
         if ( self.status & ERRORS )
         {
@@ -282,7 +282,7 @@ var Parser = Class({
                 token = new s_token( );
                 if ( tokenize( outerTokenizer, stream, outerState, token ) )
                 {
-                    //state.outer = null;
+                    state.outer = null;
                     return {parser: self, state: outerState};
                 }
                 else
@@ -300,7 +300,7 @@ var Parser = Class({
                         }
                         else
                         {
-                            //state.outer = null;
+                            state.outer = null;
                             return {parser: self, state: outerState};
                         }
                     }
@@ -349,14 +349,14 @@ var Parser = Class({
                     // use self as default passthru inner mode
                     innerParser = self;
                     innerState = new State( );
-                    outerState = new State( 1, state );
+                    outerState = /*new State( 1,*/ state /*)*/;
                 }
                 else
                 {
                     // use actual inner mode
                     innerParser = self.$subgrammars[subgrammar];
                     innerState = new State( 1, inner[subgrammar] ? inner[subgrammar] : state.status );
-                    outerState = new State( 1, state );
+                    outerState = /*new State( 1,*/ state /*)*/;
                 }
                 innerState.outer = [self, type.next, outerState];
                 return {parser: innerParser, state: innerState, toInner: subgrammar};
@@ -396,7 +396,7 @@ var Parser = Class({
                         else
                         {
                             // dispatch back to outer parser
-                            //state.outer = null;
+                            state.outer = null;
                             return {parser: outer[0], state: outerState, fromInner: state};
                         }
                     }
@@ -460,14 +460,14 @@ var Parser = Class({
                             // use self as default passthru inner parser
                             innerParser = self;
                             innerState = new State( );
-                            outerState = new State( 1, state );
+                            outerState = /*new State( 1,*/ state /*)*/;
                         }
                         else
                         {
                             // use actual inner sub-grammar parser
                             innerParser = self.$subgrammars[subgrammar];
                             innerState = new State( 1, inner[subgrammar] ? inner[subgrammar] : state.status );
-                            outerState = new State( 1, state );
+                            outerState = /*new State( 1,*/ state /*)*/;
                         }
                         innerState.outer = [self, type.next, outerState];
                         return {parser: innerParser, state: innerState, toInner: subgrammar};
