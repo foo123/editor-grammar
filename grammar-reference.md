@@ -591,7 +591,7 @@ Specificaly:
 
 The model envisioned for modular highlighting is shown below:
 
-![Specification - Analyser - Renderer Model](spec-analyser-renderer-diagram.png)
+![Specification - Analyser - Renderer Model](spec-analyser-renderer-diagram-simple.png)
 
 
 1. User specifies a `specification` (a `grammar` model) for a language
