@@ -4,7 +4,7 @@ Invariant Codebase of `editor-grammar`
 
 
 
-[![Specification - Analyser - Renderer Model](spec-analyser-renderer-diagram.png)](grammar-reference.md#modularity-and-future-directions)
+[![Specification - Analyser - Renderer Model](spec-analyser-renderer-diagram-simple.png)](grammar-reference.md#modularity-and-future-directions)
 
 
 
