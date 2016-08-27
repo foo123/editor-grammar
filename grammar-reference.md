@@ -598,7 +598,12 @@ The model envisioned for modular highlighting is shown below:
 2. The specification along with the source code (to be highlighted) is passed to the `analyser` (`parser`), which uses the specification to analyse the code and extract data (see below)
 3. The analysed code data and the source code are passed to the `renderer` (`editor`, e.g `codemirror`, `ace`,..) which renders the code and interacts with the user
 
+
 More or less this model is used now by highlight editors (e.g `codemirror`, `ace`, ..) however it is not modular.
+
+![Parser - Renderer Model](parser-renderer-diagram.png)
+
+
 The new `specification-analyser-renderer model` has the following features / advantages:
 
 1. Specification is at the same time both **concise** and **detailed, self-contained** (this is achieved by modeling all necessary features of a language in a symbolic way, see below).
