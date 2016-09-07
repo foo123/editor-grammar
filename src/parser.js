@@ -48,7 +48,7 @@ function State( unique, s )
         {
             self.queu = [];
             self.symb = {};
-            self.ctx = [];
+            self.ctx = null;
             self.err = {};
         }
         // else dont use-up more space and clutter

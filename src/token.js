@@ -293,7 +293,7 @@ function t_err( t )
 function error_( state, l1, c1, l2, c2, t, err )
 {
     if ( state.status & ERRORS )
-    state.err[ l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
+    state.err[ ''+l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
     //return state;
 }
 
@@ -422,7 +422,7 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb, ctx,
+    t, t0, ns, msg, queu, symb,
     l1, c1, l2, c2, in_ctx, err, t_str, is_block,
     no_errors = !(state.status & ERRORS);
 
@@ -435,7 +435,7 @@ function t_action( a, stream, state, token )
     if ( A_NOP === action_def[ 0 ] || is_block && !token.block ) return true;
 
     action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ];
-    msg = self.msg; queu = state.queu; symb = state.symb; ctx = state.ctx;
+    msg = self.msg;
     
     if ( is_block /*&& token.block*/ )
     {
@@ -481,37 +481,41 @@ function t_action( a, stream, state, token )
 
     else if ( A_CTXEND === action )
     {
-        if ( ctx.length ) ctx.shift();
+        state.ctx = state.ctx ? state.ctx.prev : null;
     }
 
     else if ( A_CTXSTART === action )
     {
-        ctx.unshift({symb:{},queu:[]});
+        state.ctx = new Stack({symb:{},queu:null}, state.ctx);
     }
 
     else if ( A_MCHEND === action )
     {
         if ( in_ctx )
         {
-            if ( ctx.length ) queu = ctx[0].queu;
+            if ( state.ctx ) queu = state.ctx.val.queu;
             else return true;
+        }
+        else
+        {
+            queu = state.queu;
         }
         if ( t )
         {
             t = group_replace( t, t_str );
             if ( case_insensitive ) t = t[LOWER]();
-            if ( !queu.length || t !== queu[0][0] ) 
+            if ( !queu || t !== queu.val[0] ) 
             {
                 // no match
-                if ( queu.length )
+                if ( queu )
                 {
                     self.$msg = msg
-                        ? group_replace( msg, [queu[0][0],t], true )
-                        : 'Tokens do not match "'+queu[0][0]+'","'+t+'"';
+                        ? group_replace( msg, [queu.val[0],t], true )
+                        : 'Tokens do not match "'+queu.val[0]+'","'+t+'"';
                     err = t_err( self );
-                    error_( state, queu[0][1], queu[0][2], queu[0][3], queu[0][4], self, err );
+                    error_( state, queu.val[1], queu.val[2], queu.val[3], queu.val[4], self, err );
                     error_( state, l1, c1, l2, c2, self, err );
-                    queu.shift( );
+                    queu = queu.prev;
                 }
                 else
                 {
@@ -522,17 +526,33 @@ function t_action( a, stream, state, token )
                     error_( state, l1, c1, l2, c2, self, err );
                 }
                 self.status |= ERROR;
+                if ( in_ctx )
+                {
+                    if ( state.ctx ) state.ctx.val.queu = queu;
+                }
+                else
+                {
+                    state.queu = queu;
+                }
                 return false;
             }
             else
             {
-                queu.shift( );
+                queu = queu ? queu.prev : null;
             }
         }
         else
         {
             // pop unconditionaly
-            queu.shift( );
+            queu = queu ? queu.prev : null;
+        }
+        if ( in_ctx )
+        {
+            if ( state.ctx ) state.ctx.val.queu = queu;
+        }
+        else
+        {
+            state.queu = queu;
         }
     }
 
@@ -540,8 +560,12 @@ function t_action( a, stream, state, token )
     {
         if ( in_ctx )
         {
-            if ( ctx.length ) queu = ctx[0].queu;
+            if ( state.ctx ) queu = state.ctx.val.queu;
             else return true;
+        }
+        else
+        {
+            queu = state.queu;
         }
         t = group_replace( t, t_str );
         if ( case_insensitive ) t = t[LOWER]();
@@ -550,15 +574,27 @@ function t_action( a, stream, state, token )
             : 'Token does not match "'+t+'"';
         // used when end-of-file is reached and unmatched tokens exist in the queue
         // to generate error message, if needed, as needed
-        queu.unshift( [t, l1, c1, l2, c2, t_err( self )] );
+        queu = new Stack( [t, l1, c1, l2, c2, t_err( self )], queu );
+        if ( in_ctx )
+        {
+            if ( state.ctx ) state.ctx.val.queu = queu;
+        }
+        else
+        {
+            state.queu = queu;
+        }
     }
 
     else if ( A_UNIQUE === action )
     {
         if ( in_ctx )
         {
-            if ( ctx.length ) symb = ctx[0].symb;
+            if ( state.ctx ) symb = state.ctx.val.symb;
             else return true;
+        }
+        else
+        {
+            symb = state.symb;
         }
         t0 = t[1]; ns = t[0];
         t0 = group_replace( t0, t_str, true );
