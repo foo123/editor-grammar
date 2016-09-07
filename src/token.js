@@ -182,6 +182,43 @@ function t_match( t, stream, eat, any_match )
     return false;
 }
 
+function Stack( val, prev/*, next*/ )
+{
+    this.val = val || null;
+    /*if ( prev && next )
+    {
+        this.prev = prev; this.next = next;
+        prev.next = next.prev = this;
+    }
+    else*/ if ( prev )
+    {
+        //this.next = null;
+        /*if ( prev.next )
+        {
+            prev.next.prev = this;
+            this.next = prev.next;
+        }*/
+        this.prev = prev;
+        //prev.next = this;
+    }
+    /*else if ( next )
+    {
+        this.prev = null;
+        if ( next.prev )
+        {
+            next.prev.next = this;
+            this.prev = next.prev;
+        }
+        this.next = next;
+        next.prev = this;
+    }*/
+    else
+    {
+        this.prev = null;
+        //this.next = null;
+    }
+}
+
 function tokenizer( type, name, token, msg, modifier, except, autocompletions, keywords )
 {
     var self = this;
@@ -260,34 +297,41 @@ function error_( state, l1, c1, l2, c2, t, err )
     //return state;
 }
 
-function push_at( stack, pos, token )
+function push_at( state, pos, token )
 {
-    if ( pos < stack.length ) stack.splice( pos, 0, token );
-    else stack.push( token );
-    return stack;
+    if ( state.stack === pos )
+    {
+        pos = state.stack = new Stack( token, state.stack );
+    }
+    else
+    {
+        var ptr = state.stack;
+        while ( ptr && (ptr.prev !== pos) ) ptr = ptr.prev;
+        pos = new Stack(token, pos);
+        if ( ptr) ptr.prev = pos;
+    }
+    return pos;
 }
 
-function empty( stack, $id )
+function empty( state, $id )
 {
     // http://dvolvr.davidwaterston.com/2013/06/09/restating-the-obvious-the-fastest-way-to-truncate-an-array-in-javascript/
-    var count = 0, total = stack.length;
     if ( true === $id )
     {
         // empty whole stack
-        stack.length =  0;
+        state.stack = null;
     }
     else if ( $id )
     {
         // empty only entries associated to $id
-        while ( count < total && /*stack[total-count-1] &&*/ stack[total-count-1].$id === $id ) count++;
-        if ( count ) stack.length =  total-count;
+        while ( state.stack && state.stack.val.$id === $id ) state.stack = state.stack.prev;
     }
     /*else if ( count )
     {
         // just pop one
         stack.length =  count-1;
     }*/
-    return stack;
+    return state;
 }
 
 function err_recover( state, stream, token, tokenizer )
@@ -300,49 +344,53 @@ function err_recover( state, stream, token, tokenizer )
     //if ( tokenizer.pos > stream.pos ) stream.pos = tokenizer.pos;
     //else if ( !stream.nxt( true ) ) { stream.spc( ); just_space = true; }
     
-    var stack = state.stack, stack_pos, stream_pos, stream_pos2, tok, i = 0, 
-        recover_stream = Infinity, recover_stack = -1;
+    var stack_pos, stream_pos, stream_pos2, tok, depth,
+        recover_stream = Infinity, recover_stack = null, recover_depth = Infinity;
     stream_pos = stream.pos;
     stream.spc( );
     stream_pos2 = stream.pos;
-    stack_pos = stack.length;
+    stack_pos = state.stack;
     if ( stream.pos < stream.length )
     {
         // try to recover in a state with:
         // 1. the closest stream position that matches a tokenizer in the stack (more important)
         // 2. and the minimum number of stack tokenizers to discard (less important)
-        while (stack_pos > i)
+        depth = 0;
+        while( stack_pos )
         {
-            tok = stack[stack_pos-i-1];
+            tok = stack_pos.val;
             if ( tok.$id !== tokenizer.$id ) break;
             
             while( !tokenize(tok, stream, state, token) )
             {
                 stream.pos = tok.pos > stream.pos ? tok.pos : stream.pos+1;
-                stack.length = stack_pos;
+                state.stack = stack_pos;
                 if ( stream.pos >= stream.length ) break;
             }
-            stack.length = stack_pos;
+            state.stack = stack_pos;
             
             if ( (stream.pos < stream.length) && (recover_stream > stream.pos) )
             {
                 recover_stream = stream.pos;
-                recover_stack = stack_pos-i;
+                recover_stack = stack_pos;
+                recover_depth = depth;
             }
-            else if ( (recover_stream === stream.pos) && (stack_pos-i > recover_stack) )
+            else if ( (recover_stream === stream.pos) && (depth < recover_depth) )
             {
                 recover_stream = stream.pos;
-                recover_stack = stack_pos-i;
+                recover_stack = stack_pos;
+                recover_depth = depth;
             }
             
             stream.pos = stream_pos2;
-            i++;
+            stack_pos = stack_pos.prev;
+            depth++;
         }
         
         if ( recover_stream < stream.length )
         {
             stream.pos = recover_stream;
-            stack.length = recover_stack;
+            state.stack = recover_stack;
         }
         else
         {
@@ -621,7 +669,7 @@ function t_block( t, stream, state, token )
         block_start_pos, block_end_pos, block_inside_pos,
         b_start = '', b_inside = '', b_inside_rest = '', b_end = '', b_block,
         char_escaped, next, ret, is_required, $id = self.$id || block, can_be_empty,
-        stack = state.stack, stream_pos, stream_pos0, stack_pos, line, pos, matched,
+        stream_pos, stream_pos0, stack_pos, line, pos, matched,
         outer = state.outer, outerState = outer && outer[2], outerTokenizer = outer && outer[1]
     ;
 
@@ -664,7 +712,7 @@ function t_block( t, stream, state, token )
 
     if ( found )
     {
-        stack_pos = stack.length;
+        stack_pos = state.stack;
         is_eol = T_NULL === block_end.ptype;
         can_be_empty = is_eol || self.empty;
         
@@ -684,7 +732,7 @@ function t_block( t, stream, state, token )
                 token.T = type; token.id = block; token.type = modifier || ret;
                 token.str = stream.sel(pos, stream_pos); token.match = null;
                 token.pos = [line, pos, line, stream_pos];
-                push_at( stack, stack_pos, t_clone( self, is_required, 0, $id ) );
+                push_at( state, stack_pos, t_clone( self, is_required, 0, $id ) );
                 return modifier || ret;
             }
         }
@@ -836,7 +884,7 @@ function t_block( t, stream, state, token )
         {
             state.block.ip = block_inside_pos;  state.block.ep = block_end_pos;
             state.block.i = b_inside; state.block.e = b_end;
-            push_at( stack, stack_pos, t_clone( self, is_required, 0, $id ) );
+            push_at( state, stack_pos, t_clone( self, is_required, 0, $id ) );
         }
         token.T = type; token.id = block; token.type = modifier || ret;
         token.str = stream.sel(pos, stream.pos); token.match = null;
@@ -870,14 +918,13 @@ function t_composite( t, stream, state, token )
     var self = t, type = self.type, name = self.name, tokens = self.token, n = tokens.length,
         token_izer, style, modifier = self.modifier, found, min, max,
         tokens_required, tokens_err, stream_pos, stack_pos,
-        i, i0, tt, stack, err, $id, is_sequence, backup;
+        i, i0, tt, err, $id, is_sequence, backup;
 
     self.status &= CLEAR_ERROR;
     self.$msg = self.msg || null;
 
-    stack = state.stack;
     stream_pos = stream.pos;
-    stack_pos = stack.length;
+    stack_pos = state.stack;
     self.pos = stream.pos;
 
     tokens_required = 0; tokens_err = 0;
@@ -888,7 +935,7 @@ function t_composite( t, stream, state, token )
     if ( T_SUBGRAMMAR === type )
     {
         self.status &= CLEAR_ERROR;
-        var subgrammar = new String(tokens[0]), nextTokenizer = stack.length ? stack[stack.length-1] : null;
+        var subgrammar = new String(tokens[0]), nextTokenizer = state.stack ? state.stack.val : null;
         subgrammar.subgrammar = 1;
         subgrammar.next = nextTokenizer ? new tokenizer(T_POSITIVE_LOOKAHEAD, nextTokenizer.name, [nextTokenizer]) : null;
         subgrammar.required = nextTokenizer ? nextTokenizer.status & REQUIRED : 0;
@@ -969,7 +1016,7 @@ function t_composite( t, stream, state, token )
             if ( (true !== style) || (T_EMPTY !== token_izer.type) )
             {
                 for (i=n-1; i>=i0; i--)
-                    push_at( stack, stack_pos+n-i-1, t_clone( tokens[ i ], 1, modifier, $id ) );
+                    stack_pos = push_at( state, stack_pos, t_clone( tokens[ i ], 1, modifier, $id ) );
             }
             if ( style.subgrammar /*&& !style.next*/ && (i0 < n) )
             {
@@ -1026,7 +1073,7 @@ function t_composite( t, stream, state, token )
                 {
                     // push it to the stack for more
                     self.found = found;
-                    push_at( stack, stack_pos, t_clone( self, 0, 0, get_id( ) ) );
+                    push_at( state, stack_pos, t_clone( self, 0, 0, get_id( ) ) );
                     self.found = 0;
                     return style;
                 }

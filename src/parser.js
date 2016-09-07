@@ -1,5 +1,4 @@
 
-
 function State( unique, s )
 {
     var self = this;
@@ -13,7 +12,7 @@ function State( unique, s )
         self.line = s.line;
         self.bline = s.bline;
         self.status = s.status;
-        self.stack = s.stack.slice();
+        self.stack = s.stack/*.slice()*/;
         self.token = s.token;
         self.block = s.block;
         self.outer = s.outer ? [s.outer[0], s.outer[1], new State(unique, s.outer[2])] : null;
@@ -40,7 +39,7 @@ function State( unique, s )
         self.line = -1;
         self.bline = -1;
         self.status = s || 0;
-        self.stack = [];
+        self.stack = null/*[]*/;
         self.token = null;
         self.block = null;
         self.outer = null;
@@ -75,7 +74,7 @@ function state_backup( state, stream, backup, with_errors )
         state.status = backup[0];
         state.block = backup[1];
         state.outer = backup[2];
-        if ( state.stack.length > backup[3] ) state.stack.length = backup[3];
+        state.stack = backup[3];
         if ( stream && (stream.pos > backup[4]) ) stream.bck(backup[4]);
     }
     else
@@ -84,7 +83,7 @@ function state_backup( state, stream, backup, with_errors )
             state.status,
             state.block,
             state.outer,
-            state.stack.length,
+            state.stack,
             stream ? stream.pos : Infinity
         ];
         if ( false === with_errors ) state.status = 0;
@@ -250,7 +249,7 @@ var Parser = Class({
             T = { }, $name$ = self.$n$, $type$ = self.$t$, $value$ = self.$v$, //$pos$ = 'pos',
             interleaved_tokens = grammar.$interleaved, tokens = grammar.$parser, 
             nTokens = tokens.length, niTokens = interleaved_tokens ? interleaved_tokens.length : 0,
-            tokenizer, action, token, stack, line, pos, i, ii, stream_pos, stack_pos,
+            tokenizer, action, token, line, pos, i, ii, stream_pos, stack_pos,
             type, err, notfound, just_space, block_in_progress, outer = state.outer,
             subgrammar, innerParser, innerState, foundInterleaved,
             outerState = outer && outer[2], outerTokenizer = outer && outer[1]
@@ -268,7 +267,7 @@ var Parser = Class({
             state.$blank$ = state.bline+1 === state.line;
         }
         state.$actionerr$ = false; state.token = null;
-        stack = state.stack; line = state.line; pos = stream.pos;
+        line = state.line; pos = stream.pos;
         type = false; notfound = true; err = false; just_space = false;
         //block_in_progress = state.block ? state.block.name : undef;
         
@@ -326,18 +325,19 @@ var Parser = Class({
         }
         
         // if EOL tokenizer is left on stack, pop it now
-        if ( stack.length && (T_EOL === stack[stack.length-1].type) && stream.sol() ) stack.pop();
+        if ( state.stack && (T_EOL === state.stack.val.type) && stream.sol() ) state.stack = state.stack.prev;
         
         // check for non-space tokenizer or partial-block-in-progress, before parsing any space/empty
-        if ( (!stack.length 
-            || ((T_NONSPACE !== stack[stack.length-1].type) && (null == state.block) /*(block_in_progress !== stack[stack.length-1].name)*/)) 
+        if ( (!state.stack 
+            || ((T_NONSPACE !== state.stack.val.type) && (null == state.block) /*(block_in_progress !== stack[stack.length-1].name)*/)) 
             && stream.spc() )
         {
             // subgrammar follows, push the spaces back and let subgrammar handle them
-            if ( stack.length && (T_SUBGRAMMAR === stack[stack.length-1].type) )
+            if ( state.stack && (T_SUBGRAMMAR === state.stack.val.type) )
             {
                 stream.bck( pos );
-                tokenizer = stack.pop();
+                tokenizer = state.stack.val;
+                state.stack = state.stack.prev;
                 type = tokenize( tokenizer, stream, state, token );
                 // subgrammar / submode
                 /*if ( type.subgrammar )
@@ -375,9 +375,9 @@ var Parser = Class({
             token = new s_token( );
             
             i = 0;
-            while ( notfound && (stack.length || i<nTokens) && !stream.eol() )
+            while ( notfound && (state.stack || i<nTokens) && !stream.eol() )
             {
-                stream_pos = stream.pos; stack_pos = stack.length;
+                stream_pos = stream.pos; stack_pos = state.stack;
                 
                 // check for outer parser interleaved
                 if ( outerTokenizer )
@@ -419,8 +419,16 @@ var Parser = Class({
                 if ( notfound && !foundInterleaved )
                 {
                     // seems stack and/or ngrams can ran out while inside the loop !!  ?????
-                    if ( !stack.length && i>=nTokens) break;
-                    tokenizer = stack.length ? stack.pop() : tokens[i++];
+                    if ( !state.stack && i>=nTokens) break;
+                    if ( state.stack )
+                    {
+                        tokenizer = state.stack.val;
+                        state.stack = state.stack.prev;
+                    }
+                    else
+                    {
+                        tokenizer = tokens[i++];
+                    }
                     type = tokenize( tokenizer, stream, state, token );
                 }
                 
@@ -474,25 +482,26 @@ var Parser = Class({
                     }
                     
                     // partial block, apply maybe any action(s) following it
-                    if ( stack.length > 1 && stream.eol() &&  
-                        (T_BLOCK & stack[stack.length-1].type) && state.block &&
-                        state.block.name === stack[stack.length-1].name 
+                    if ( state.stack && state.stack.prev && stream.eol() &&  
+                        (T_BLOCK & state.stack.val.type) && state.block &&
+                        state.block.name === state.stack.val.name 
                     )
                     {
-                        ii = stack.length-2;
-                        while ( ii >= 0 && T_ACTION === stack[ii].type )
+                        ii = state.stack.prev;
+                        while ( ii && T_ACTION === ii.val.type )
                         {
-                            action = stack[ii--]; t_action( action, stream, state, token );
+                            action = ii; ii = ii.prev; t_action( action, stream, state, token );
                             // action error
                             if ( action.status & ERROR ) state.$actionerr$ = true;
                         }
                     }
                     // action token(s) follow, execute action(s) on current token
-                    else if ( stack.length && (T_ACTION === stack[stack.length-1].type) )
+                    else if ( state.stack && (T_ACTION === state.stack.val.type) )
                     {
-                        while ( stack.length && (T_ACTION === stack[stack.length-1].type) )
+                        while ( state.stack && (T_ACTION === state.stack.val.type) )
                         {
-                            action = stack.pop();
+                            action = state.stack.val;
+                            state.stack = state.stack.prev;
                             t_action( action, stream, state, token );
                             // action error
                             if ( action.status & ERROR ) state.$actionerr$ = true;
@@ -634,12 +643,12 @@ var Parser = Class({
     }
 
     ,autocompletion: function( state, min_found ) {
-        var stack = state.stack, i, token, type,
+        var stack = state.stack, token, type,
             hash = {}, follows = generate_autocompletion( [ state.token ], [], hash );
         min_found  = min_found || 0;
-        for(i=stack.length-1; i>=0; i--)
+        while( stack )
         {
-            token = stack[ i ]; type = token.type;
+            token = stack.val; type = token.type;
             if ( T_REPEATED & type )
             {
                 follows = generate_autocompletion( [ token ], follows, hash );
@@ -650,6 +659,7 @@ var Parser = Class({
                 follows = generate_autocompletion( [ token ], follows, hash );
                 if ( min_found < follows.length ) break;
             }
+            stack = stack.prev;
         }
         return follows;
     }
