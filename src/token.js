@@ -334,6 +334,25 @@ function empty( state, $id )
     return state;
 }
 
+function stack_clone( stack, deep )
+{
+    if ( null == stack ) return null;
+    if ( deep )
+    {
+        var stack2 = new Stack( stack.val ), ptr2 = stack2, ptr = stack;
+        while( ptr.prev )
+        {
+            ptr2.prev = new Stack( ptr.prev.val );
+            ptr = ptr.prev; ptr2 = ptr2.prev;
+        }
+        return stack2;
+    }
+    else
+    {
+        return stack;
+    }
+}
+
 function err_recover( state, stream, token, tokenizer )
 {
     //var just_space = false;

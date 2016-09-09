@@ -12,7 +12,7 @@ function State( unique, s )
         self.line = s.line;
         self.bline = s.bline;
         self.status = s.status;
-        self.stack = s.stack/*.slice()*/;
+        self.stack = stack_clone( s.stack, false );
         self.token = s.token;
         self.block = s.block;
         self.outer = s.outer ? [s.outer[0], s.outer[1], new State(unique, s.outer[2])] : null;
