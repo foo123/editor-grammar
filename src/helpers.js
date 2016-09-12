@@ -1052,7 +1052,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                             Syntax[ curr_token ] = {
                                 type:'*' === c ? 'zeroOrMore' : ('+' === c ? 'oneOrMore' : 'zeroOrOne'),
                                 tokens:[prev_token]
-                            }
+                            };
                         sequence[sequence.length-1] = curr_token;
                     }
                     else token += c;
@@ -1109,7 +1109,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                             Syntax[ curr_token ] = {
                                 type:'!' === c ? 'negativeLookahead' : 'positiveLookahead',
                                 tokens:[prev_token]
-                            }
+                            };
                         sequence[sequence.length-1] = curr_token;
                     }
                     else token += c;
