@@ -267,7 +267,7 @@ var Folder = {
     ,MarkedUp: function( T, L, R, S, M ) {
         T = T || TRUE;
         L = L || "<"; R = R || ">"; S = S || "/";
-        M = M || new_re( esc_re(L) + "(" + esc_re(S) + "?)([a-zA-Z_\\-][a-zA-Z0-9_\\-:]*)", "g" );
+        M = M || new_re( esc_re(L) + "(" + esc_re(S) + "?)([a-zA-Z_\\-][a-zA-Z0-9_\\-:]*)", {g:1} );
 
         return function fold_markup( iter ) {
             iter.col = 0; iter.min = iter.first( ); iter.max = iter.last( );

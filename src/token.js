@@ -66,7 +66,7 @@ function t_match( t, stream, eat, any_match )
                 if ( end.regex_pattern )
                 {
                     // dynamicaly-created regex with substistution group as well
-                    m = group_replace( end, match[1], 0, 1 );
+                    m = group_replace( end, match[1]/*, 0, 1*/ );
                     end = new matcher( P_SIMPLE, name+'_End', get_re(m, end.regex_pattern, {}), T_REGEX );
                 }
                 else
@@ -99,8 +99,8 @@ function t_match( t, stream, eat, any_match )
         }
         else if ( T_REGEX === type )
         {
-            m = stream.slice( stream.pos ).match( pattern[0] );
-            if ( m && 0 === m.index )
+            m = pattern[0].xflags.l ? stream.match( pattern[0] ) : stream.slice( stream.pos ).match( pattern[0] );
+            if ( m && (0 === m.index) )
             {
                 if ( false !== eat ) stream.mov( m[ pattern[1]||0 ].length );
                 return [ key, pattern[1] > 0 ? m[pattern[1]] : m ];

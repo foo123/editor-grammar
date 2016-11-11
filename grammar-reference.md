@@ -30,6 +30,12 @@
 The first character after the `RegExpID` is considered the regular expression delimiter (similar to php regex usage), in this way *regular expression flags* can be added (mostly the case-insensitive flag `i` )
 
 
+**Supported Regular Expression Flags**
+
+* **`i`** case-**i**nsensitive match
+* **`x`** e**x**tended regular expression, contains dynamic substitution patterns (useful for `block` tokens' patterns, see below)
+* **`l`** match from start of **l**ine instead of current stream position (same as starting regular expression with `^` special character)
+
 example:
 ```javascript
 

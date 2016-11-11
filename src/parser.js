@@ -61,11 +61,12 @@ function State( unique, s )
         }
         self.$eol$ = true; self.$blank$ = true;
     }
-    // make sure to generate a string which will cover most cases where state needs to be updated by the editor
-    self.toString = function() {
-        return self.id+'_'+self.line+'_'+self.bline+'_'+(self.block?self.block.name:'0');
-    };
 }
+// make sure to generate a string which will cover most cases where state needs to be updated by the editor
+State.prototype.toString = function( ){
+    var self = this;
+    return self.id+'_'+self.line+'_'+self.bline+'_'+(self.block?self.block.name:'0');
+};
 
 function state_backup( state, stream, backup, with_errors )
 {
