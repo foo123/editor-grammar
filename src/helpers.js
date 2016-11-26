@@ -9,14 +9,32 @@ var escaped_re = /([.*+?^${}()|[\]\/\\\-])/g,
     combine_delimiter = "(\\s|\\W|$)" /* more flexible than \\b */;
 
 /*
-//html_ispecial_re = /&#(\d+);/g,
-function html_unescaper( m, c )
+[ '&', 38 ]
+[ '<', 60 ]
+[ '>', 62 ]
+[ '\'', 39 ]
+[ '"', 34 ]
+de_html_special_num_re = /&#(34|38|39|60|62);/g,
+function html_escaper( c )
 {
-    return String.fromCharCode(parseInt(c,10));
+    return "&#" + c.charCodeAt(0) + ";";
 }
-function unesc_html( s )
+function html_de_escaper( c, g1 )
 {
-    return s.replace(html_ispecial_re, html_unescaper);
+    return '38' === g1
+        ? '&'
+        : ('60' === g1
+        ? '<'
+        : ('62' === g1
+        ? '>'
+        : ('34' === g1
+        ? '"'
+        : '\'')))
+    ;
+}
+function de_esc_html( s, num_entities )
+{
+    return num_entities ? s.replace(de_html_special_num_re, html_de_escaper) : s.replace(de_html_special_re, html_de_escaper_entities);
 }
 */
 
@@ -622,43 +640,73 @@ function preprocess_grammar( grammar )
             else if ( tok['error'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'error', tok.error, !!tok['in-context'] ];
+                tok.action = [ 'error', tok.error, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'error');
+            }
+            else if ( tok[HAS]('hypercontext') )
+            {
+                tok.type = 'action';
+                tok.action = [ !!tok.hypercontext ? 'hypercontext-start' : 'hypercontext-end', tok['hypercontext'], !!tok['in-context'], !!tok['in-hypercontext'] ];
+                del(tok,'hypercontext');
             }
             else if ( tok[HAS]('context') )
             {
                 tok.type = 'action';
-                tok.action = [ !!tok.context ? 'context-start' : 'context-end', tok['context'], !!tok['in-context'] ];
+                tok.action = [ !!tok.context ? 'context-start' : 'context-end', tok['context'], !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'context');
             }
             else if ( tok['indent'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'indent', tok.indent, !!tok['in-context'] ];
+                tok.action = [ 'indent', tok.indent, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'indent');
             }
             else if ( tok['outdent'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'outdent', tok.outdent, !!tok['in-context'] ];
+                tok.action = [ 'outdent', tok.outdent, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'outdent');
+            }
+            else if ( tok['define'] )
+            {
+                tok.type = 'action';
+                tok.action = [ 'define', T_STR&get_type(tok.define) ? ['*', tok.define] : tok.define, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                del(tok,'define');
+            }
+            else if ( tok['undefine'] )
+            {
+                tok.type = 'action';
+                tok.action = [ 'undefine', T_STR&get_type(tok.undefine) ? ['*', tok.undefine] : tok.undefine, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                del(tok,'undefine');
+            }
+            else if ( tok['defined'] )
+            {
+                tok.type = 'action';
+                tok.action = [ 'defined', T_STR&get_type(tok.defined) ? ['*', tok.defined] : tok.defined, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                del(tok,'defined');
+            }
+            else if ( tok['notdefined'] )
+            {
+                tok.type = 'action';
+                tok.action = [ 'notdefined', T_STR&get_type(tok.notdefined) ? ['*', tok.notdefined] : tok.notdefined, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                del(tok,'notdefined');
             }
             else if ( tok['unique'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'unique', T_STR&get_type(tok.unique) ? ['_DEFAULT_', tok.unique] : tok.unique, !!tok['in-context'] ];
+                tok.action = [ 'unique', T_STR&get_type(tok.unique) ? ['*', tok.unique] : tok.unique, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'unique');
             }
             else if ( tok['push'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'push', tok.push, !!tok['in-context'] ];
+                tok.action = [ 'push', tok.push, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'push');
             }
             else if ( tok[HAS]('pop') )
             {
                 tok.type = 'action';
-                tok.action = [ 'pop', tok.pop, !!tok['in-context'] ];
+                tok.action = [ 'pop', tok.pop, !!tok['in-context'], !!tok['in-hypercontext'] ];
                 del(tok,'pop');
             }
             else
@@ -986,7 +1034,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     token = '';
                 }
             
-                if ( '.' === c )
+                if ( '.' === c /*|| ':' === c*/ )
                 {
                     // a dot by itself, not specifying a modifier
                     if ( sequence.length && t.pos < t.length && 
@@ -994,7 +1042,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     else token += c;
                 }
                 
-                else if ( '"' === c || "'" === c )
+                else if ( ('"' === c) || ("'" === c) )
                 {
                     // literal token, quoted
                     literal = get_delimited( t, c, '\\', true );
@@ -1055,7 +1103,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     else token += c;*/
                 }
                 
-                else if ( '*' === c || '+' === c || '?' === c )
+                else if ( ('*' === c) || ('+' === c) || ('?' === c) )
                 {
                     // repeat modifier, applies to token that comes before
                     if ( sequence.length )
@@ -1112,7 +1160,7 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     continue;
                 }
                 
-                else if ( '&' === c || '!' === c )
+                else if ( ('&' === c) || ('!' === c) )
                 {
                     // lookahead modifier, applies to token that comes before
                     if ( sequence.length )
@@ -1404,14 +1452,21 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
         {
             if ( token[HAS]('nop') ) token.action = [A_NOP, token.nop, !!token['in-context']];
             else if ( token[HAS]('error') ) token.action = [A_ERROR, token.error, !!token['in-context']];
-            else if ( token[HAS]('context') ) token.action = [!!token.context?A_CTXSTART:A_CTXEND, token['context'], !!token['in-context']];
-            else if ( token[HAS]('context-start') ) token.action = [A_CTXSTART, token['context-start'], !!token['in-context']];
-            else if ( token[HAS]('context-end') ) token.action = [A_CTXEND, token['context-end'], !!token['in-context']];
-            else if ( token[HAS]('push') ) token.action = [A_MCHSTART, token.push, !!token['in-context']];
-            else if ( token[HAS]('pop') ) token.action = [A_MCHEND, token.pop, !!token['in-context']];
-            else if ( token[HAS]('unique') ) token.action = [A_UNIQUE, T_STR&get_type(token.unique)?['_DEFAULT_',token.unique]:token.unique, !!token['in-context']];
-            else if ( token[HAS]('indent') ) token.action = [A_INDENT, token.indent, !!token['in-context']];
-            else if ( token[HAS]('outdent') ) token.action = [A_OUTDENT, token.outdent, !!token['in-context']];
+            else if ( token[HAS]('context') ) token.action = [!!token.context?A_CTXSTART:A_CTXEND, token['context'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('hypercontext') ) token.action = [!!token.hypercontext?A_HYPCTXSTART:A_HYPCTXEND, token['context'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('context-start') ) token.action = [A_CTXSTART, token['context-start'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('context-end') ) token.action = [A_CTXEND, token['context-end'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('hypercontext-start') ) token.action = [A_HYPCTXSTART, token['hypcontext-start'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('hypercontext-end') ) token.action = [A_HYPCTXEND, token['hypcontext-end'], !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('push') ) token.action = [A_MCHSTART, token.push, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('pop') ) token.action = [A_MCHEND, token.pop, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('define') ) token.action = [A_DEFINE, T_STR&get_type(token.define)?['*',token.define]:token.define, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('undefine') ) token.action = [A_UNDEFINE, T_STR&get_type(token.undefine)?['*',token.undefine]:token.undefine, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('defined') ) token.action = [A_DEFINED, T_STR&get_type(token.defined)?['*',token.defined]:token.defined, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('notdefined') ) token.action = [A_NOTDEFINED, T_STR&get_type(token.notdefined)?['*',token.notdefined]:token.notdefined, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('unique') ) token.action = [A_UNIQUE, T_STR&get_type(token.unique)?['*',token.unique]:token.unique, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('indent') ) token.action = [A_INDENT, token.indent, !!token['in-context'], !!token['in-hypercontext']];
+            else if ( token[HAS]('outdent') ) token.action = [A_OUTDENT, token.outdent, !!token['in-context'], !!token['in-hypercontext']];
         }
         else
         {
@@ -1419,12 +1474,19 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
             else if ( 'error' === token.action[0] ) token.action[0] = A_ERROR;
             else if ( 'context-start' === token.action[0] ) token.action[0] = A_CTXSTART;
             else if ( 'context-end' === token.action[0] ) token.action[0] = A_CTXEND;
+            else if ( 'hypercontext-start' === token.action[0] ) token.action[0] = A_HYPCTXSTART;
+            else if ( 'hypercontext-end' === token.action[0] ) token.action[0] = A_HYPCTXEND;
             else if ( 'push' === token.action[0] ) token.action[0] = A_MCHSTART;
             else if ( 'pop' === token.action[0] ) token.action[0] = A_MCHEND;
+            else if ( 'define' === token.action[0] ) token.action[0] = A_DEFINE;
+            else if ( 'undefine' === token.action[0] ) token.action[0] = A_UNDEFINE;
+            else if ( 'defined' === token.action[0] ) token.action[0] = A_DEFINED;
+            else if ( 'notdefined' === token.action[0] ) token.action[0] = A_NOTDEFINED;
             else if ( 'unique' === token.action[0] ) token.action[0] = A_UNIQUE;
             else if ( 'indent' === token.action[0] ) token.action[0] = A_INDENT;
             else if ( 'outdent' === token.action[0] ) token.action[0] = A_OUTDENT;
         }
+        if ( false === token.msg ) $msg$ = false;
         // NOP action, no action
         if ( token.nop ) token.action[0] = A_NOP;
         $token$ = new tokenizer( T_ACTION, tokenID, token.action.slice(), $msg$, $modifier$ );

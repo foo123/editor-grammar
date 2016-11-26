@@ -230,7 +230,7 @@ function tokenizer( type, name, token, msg, modifier, except, autocompletions, k
     self.autocompletions = autocompletions || null;
     self.keywords = keywords || null;
     self.pos = null;
-    self.msg = msg || null;
+    self.msg = false === msg ? false : (msg || null);
     self.$msg = null;
     self.status = 0;
     self.empty = false; self.ci = false; self.mline = true; self.esc = false; self.inter = false;
@@ -247,7 +247,8 @@ function s_token( )
     t.match = null;
     t.str = '';
     t.pos = null;
-    t.block =  null;
+    t.block = null;
+    t.space = null;
 }
 
 function t_clone( t, required, modifier, $id )
@@ -292,9 +293,44 @@ function t_err( t )
 
 function error_( state, l1, c1, l2, c2, t, err )
 {
-    if ( state.status & ERRORS )
+    if ( (state.status & ERRORS) && state.err )
     state.err[ ''+l1+'_'+c1+'_'+l2+'_'+c2+'_'+(t?t.name:'ERROR') ] = [ l1, c1, l2, c2, err || t_err( t ) ];
     //return state;
+}
+
+function find_key( list, key, least, hash )
+{
+    if ( hash )
+    {
+        return list && list[HAS](key) ? list[key] : null;
+    }
+    else
+    {
+        var next = null, match = null;
+        while ( list )
+        {
+            if ( key === list.val[0] )
+            {
+                match = {prev:list.prev, next:next, node:list, val:list.val[1]};
+                if ( !least ) return match;
+            }
+            next = list; list = list.prev;
+        }
+        return match;
+    }
+}
+
+function add_key( list, key, val, hash )
+{
+    if ( hash )
+    {
+        list[key] = val;
+        return list;
+    }
+    else
+    {
+        return new Stack([key,val], list);
+    }
 }
 
 function push_at( state, pos, token )
@@ -379,8 +415,7 @@ function err_recover( state, stream, token, tokenizer )
         {
             tok = stack_pos.val;
             if ( tok.$id !== tokenizer.$id ) break;
-            
-            while( !tokenize(tok, stream, state, token) )
+            while( (T_ACTION !== tok.type) && !tokenize(tok, stream, state, token) )
             {
                 stream.pos = tok.pos > stream.pos ? tok.pos : stream.pos+1;
                 state.stack = stack_pos;
@@ -414,6 +449,7 @@ function err_recover( state, stream, token, tokenizer )
         else
         {
             stream.end( );
+            state.stack = null;
         }
     }
     /*else
@@ -441,19 +477,19 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb,
-    l1, c1, l2, c2, in_ctx, err, t_str, is_block,
-    no_errors = !(state.status & ERRORS);
+    t, t0, ns, msg, queu, symb, found,
+    l1, c1, l2, c2, in_ctx, in_hctx, err, t_str, is_block,
+    no_state_errors = !(state.status & ERRORS);
 
     self.status = 0; self.$msg = null;
 
     // do action only if state.status handles (action) errors, else dont clutter
-    if ( no_errors || !action_def || !token || !token.pos ) return true;
+    if ( /*no_state_errors ||*/ !action_def || !token || !token.pos ) return true;
     is_block = !!(T_BLOCK & token.T);
     // NOP action, return OR partial block not completed yet, postpone
     if ( A_NOP === action_def[ 0 ] || is_block && !token.block ) return true;
 
-    action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ];
+    action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ]; in_hctx = action_def[ 3 ];
     msg = self.msg;
     
     if ( is_block /*&& token.block*/ )
@@ -469,6 +505,163 @@ function t_action( a, stream, state, token )
         l2 = token.pos[2];              c2 = token.pos[3];
     }
 
+    if ( A_CTXEND === action )
+    {
+        state.ctx = state.ctx ? state.ctx.prev : null;
+    }
+
+    else if ( A_CTXSTART === action )
+    {
+        state.ctx = new Stack({symb:null,queu:null}, state.ctx);
+    }
+
+    else if ( A_HYPCTXEND === action )
+    {
+        state.hctx = state.hctx ? state.hctx.prev : null;
+    }
+
+    else if ( A_HYPCTXSTART === action )
+    {
+        state.hctx = new Stack({symb:null,queu:null}, state.hctx);
+    }
+
+    else if ( A_DEFINE === action )
+    {
+        symb = in_hctx && state.hctx ? state.hctx.val.symb : (in_ctx && state.ctx ? state.ctx.val.symb : state.symb);
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        ns += '::'+t0; found = find_key(symb, ns);
+        if ( !found || (found.val[0] > l1) || ((found.val[0] === l1) && (found.val[1] > c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] > l2) || (found.val[3] > c2))) )
+        {
+            if ( found )
+            {
+                found.val[0] = l1; found.val[1] = c1;
+                found.val[2] = l2; found.val[3] = c2;
+            }
+            else
+            {
+                if ( in_hctx && state.hctx )
+                {
+                    state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2]);
+                }
+                else if ( in_ctx && state.ctx )
+                {
+                    state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2]);
+                }
+                else
+                {
+                    state.symb = add_key(state.symb, ns, [l1, c1, l2, c2]);
+                }
+            }
+        }
+    }
+    
+    else if ( A_UNDEFINE === action )
+    {
+        symb = in_hctx && state.hctx ? state.hctx.val.symb : (in_ctx && state.ctx ? state.ctx.val.symb : state.symb);
+        if ( !symb ) return true;
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        ns += '::'+t0; found = find_key(symb, ns);
+        if ( found && ((found.val[0] < l1) || ((found.val[0] === l1) && (found.val[1] <= c1))) )
+        {
+            if ( found.next )
+            {
+                found.next.prev = found.prev;
+            }
+            else
+            {
+                if ( in_hctx && state.hctx )
+                {
+                    state.hctx.val.symb = state.hctx.val.symb.prev;
+                }
+                else if ( in_ctx && state.ctx )
+                {
+                    state.ctx.val.symb = state.ctx.val.symb.prev;
+                }
+                else
+                {
+                    state.symb = state.symb.prev;
+                }
+            }
+        }
+    }
+    
+    else if ( A_DEFINED === action )
+    {
+        symb = in_hctx && state.hctx ? state.hctx.val.symb : (in_ctx && state.ctx ? state.ctx.val.symb : state.symb);
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        ns += '::'+t0; found = find_key(symb, ns);
+        if ( !found || (found.val[0] > l1) || ((found.val[0] === l1) && (found.val[1] > c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] > l2) || (found.val[3] > c2))) )
+        {
+            // undefined
+            if ( false !== msg )
+            {
+                self.$msg = msg
+                    ? group_replace( msg, t0, true )
+                    : 'Undefined "'+t0+'"';
+                err = t_err( self );
+                error_( state, l1, c1, l2, c2, self, err );
+                self.status |= ERROR;
+            }
+            if ( found )
+            {
+                if ( found.next )
+                {
+                    found.next.prev = found.prev;
+                }
+                else
+                {
+                    if ( in_hctx && state.hctx )
+                    {
+                        state.hctx.val.symb = state.hctx.val.symb.prev;
+                    }
+                    else if ( in_ctx && state.ctx )
+                    {
+                        state.ctx.val.symb = state.ctx.val.symb.prev;
+                    }
+                    else
+                    {
+                        state.symb = state.symb.prev;
+                    }
+                }
+            }
+            return false;
+        }
+    }
+    
+    else if ( A_NOTDEFINED === action )
+    {
+        symb = in_hctx && state.hctx ? state.hctx.val.symb : (in_ctx && state.ctx ? state.ctx.val.symb : state.symb);
+        if ( !symb ) return true;
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        ns += '::'+t0; found = find_key(symb, ns, 1);
+        if ( found && ((found.val[0] < l1) || ((found.val[0] === l1) && (found.val[1] <= c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] <= l2) && (found.val[3] <= c2)))) )
+        {
+            // defined
+            if ( false !== msg )
+            {
+                self.$msg = msg
+                    ? group_replace( msg, t0, true )
+                    : 'Defined "'+t0+'"';
+                err = t_err( self );
+                error_( state, found.val[0], found.val[1], found.val[2], found.val[3], self, err );
+                error_( state, l1, c1, l2, c2, self, err );
+                self.status |= ERROR;
+            }
+            return false;
+        }
+    }
+    
+    // above actions can run during live editing as well
+    if ( no_state_errors ) return true;
+    
     if ( A_ERROR === action )
     {
         if ( !msg && (T_STR & get_type(t)) ) msg = t;
@@ -476,6 +669,179 @@ function t_action( a, stream, state, token )
         error_( state, l1, c1, l2, c2, self, t_err( self ) );
         self.status |= ERROR;
         return false;
+    }
+
+    else if ( A_UNIQUE === action )
+    {
+        if ( in_hctx )
+        {
+            if ( state.hctx ) symb = state.hctx.val.symb;
+            else return true;
+        }
+        else if ( in_ctx )
+        {
+            if ( state.ctx ) symb = state.ctx.val.symb;
+            else return true;
+        }
+        else
+        {
+            symb = state.symb;
+        }
+        t0 = t[1]; ns = t[0];
+        t0 = group_replace( t0, t_str, true );
+        if ( case_insensitive ) t0 = t0[LOWER]();
+        ns += '::'+t0; found = find_key(symb, ns);
+        if ( found )
+        {
+            // duplicate
+            if ( false !== msg )
+            {
+                self.$msg = msg
+                    ? group_replace( msg, t0, true )
+                    : 'Duplicate "'+t0+'"';
+                err = t_err( self );
+                error_( state, found.val[0], found.val[1], found.val[2], found.val[3], self, err );
+                error_( state, l1, c1, l2, c2, self, err );
+                self.status |= ERROR;
+            }
+            return false;
+        }
+        else
+        {
+            if ( in_hctx )
+            {
+                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2]);
+            }
+            else if ( in_ctx )
+            {
+                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2]);
+            }
+            else
+            {
+                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2]);
+            }
+        }
+    }
+    
+    else if ( A_MCHEND === action )
+    {
+        if ( in_hctx )
+        {
+            if ( state.hctx ) queu = state.hctx.val.queu;
+            else return true;
+        }
+        else if ( in_ctx )
+        {
+            if ( state.ctx ) queu = state.ctx.val.queu;
+            else return true;
+        }
+        else
+        {
+            queu = state.queu;
+        }
+        if ( t )
+        {
+            t = group_replace( t, t_str );
+            if ( case_insensitive ) t = t[LOWER]();
+            if ( !queu || t !== queu.val[0] ) 
+            {
+                // no match
+                if ( false !== msg )
+                {
+                    if ( queu )
+                    {
+                        self.$msg = msg
+                            ? group_replace( msg, [queu.val[0],t], true )
+                            : 'Mismatched "'+queu.val[0]+'","'+t+'"';
+                        err = t_err( self );
+                        error_( state, queu.val[1], queu.val[2], queu.val[3], queu.val[4], self, err );
+                        error_( state, l1, c1, l2, c2, self, err );
+                        queu = queu.prev;
+                    }
+                    else
+                    {
+                        self.$msg = msg
+                            ? group_replace( msg, ['',t], true )
+                            : 'Missing matching "'+t+'"';
+                        err = t_err( self );
+                        error_( state, l1, c1, l2, c2, self, err );
+                    }
+                    self.status |= ERROR;
+                }
+                if ( in_hctx )
+                {
+                    if ( state.hctx ) state.hctx.val.queu = queu;
+                }
+                else if ( in_ctx )
+                {
+                    if ( state.ctx ) state.ctx.val.queu = queu;
+                }
+                else
+                {
+                    state.queu = queu;
+                }
+                return false;
+            }
+            else
+            {
+                queu = queu ? queu.prev : null;
+            }
+        }
+        else
+        {
+            // pop unconditionaly
+            queu = queu ? queu.prev : null;
+        }
+        if ( in_hctx )
+        {
+            if ( state.hctx ) state.hctx.val.queu = queu;
+        }
+        else if ( in_ctx )
+        {
+            if ( state.ctx ) state.ctx.val.queu = queu;
+        }
+        else
+        {
+            state.queu = queu;
+        }
+    }
+
+    else if ( (A_MCHSTART === action) && t )
+    {
+        if ( in_hctx )
+        {
+            if ( state.hctx ) queu = state.hctx.val.queu;
+            else return true;
+        }
+        else if ( in_ctx )
+        {
+            if ( state.ctx ) queu = state.ctx.val.queu;
+            else return true;
+        }
+        else
+        {
+            queu = state.queu;
+        }
+        t = group_replace( t, t_str );
+        if ( case_insensitive ) t = t[LOWER]();
+        self.$msg = msg
+            ? group_replace( msg, t, true )
+            : 'Missing matching "'+t+'"';
+        // used when end-of-file is reached and unmatched tokens exist in the queue
+        // to generate error message, if needed, as needed
+        queu = new Stack( [t, l1, c1, l2, c2, t_err( self )], queu );
+        if ( in_hctx )
+        {
+            if ( state.hctx ) state.hctx.val.queu = queu;
+        }
+        else if ( in_ctx )
+        {
+            if ( state.ctx ) state.ctx.val.queu = queu;
+        }
+        else
+        {
+            state.queu = queu;
+        }
     }
 
     /*else if ( A_INDENT === action )
@@ -498,144 +864,6 @@ function t_action( a, stream, state, token )
         // TODO
     }*/
 
-    else if ( A_CTXEND === action )
-    {
-        state.ctx = state.ctx ? state.ctx.prev : null;
-    }
-
-    else if ( A_CTXSTART === action )
-    {
-        state.ctx = new Stack({symb:{},queu:null}, state.ctx);
-    }
-
-    else if ( A_MCHEND === action )
-    {
-        if ( in_ctx )
-        {
-            if ( state.ctx ) queu = state.ctx.val.queu;
-            else return true;
-        }
-        else
-        {
-            queu = state.queu;
-        }
-        if ( t )
-        {
-            t = group_replace( t, t_str );
-            if ( case_insensitive ) t = t[LOWER]();
-            if ( !queu || t !== queu.val[0] ) 
-            {
-                // no match
-                if ( queu )
-                {
-                    self.$msg = msg
-                        ? group_replace( msg, [queu.val[0],t], true )
-                        : 'Tokens do not match "'+queu.val[0]+'","'+t+'"';
-                    err = t_err( self );
-                    error_( state, queu.val[1], queu.val[2], queu.val[3], queu.val[4], self, err );
-                    error_( state, l1, c1, l2, c2, self, err );
-                    queu = queu.prev;
-                }
-                else
-                {
-                    self.$msg = msg
-                        ? group_replace( msg, ['',t], true )
-                        : 'Token does not match "'+t+'"';
-                    err = t_err( self );
-                    error_( state, l1, c1, l2, c2, self, err );
-                }
-                self.status |= ERROR;
-                if ( in_ctx )
-                {
-                    if ( state.ctx ) state.ctx.val.queu = queu;
-                }
-                else
-                {
-                    state.queu = queu;
-                }
-                return false;
-            }
-            else
-            {
-                queu = queu ? queu.prev : null;
-            }
-        }
-        else
-        {
-            // pop unconditionaly
-            queu = queu ? queu.prev : null;
-        }
-        if ( in_ctx )
-        {
-            if ( state.ctx ) state.ctx.val.queu = queu;
-        }
-        else
-        {
-            state.queu = queu;
-        }
-    }
-
-    else if ( (A_MCHSTART === action) && t )
-    {
-        if ( in_ctx )
-        {
-            if ( state.ctx ) queu = state.ctx.val.queu;
-            else return true;
-        }
-        else
-        {
-            queu = state.queu;
-        }
-        t = group_replace( t, t_str );
-        if ( case_insensitive ) t = t[LOWER]();
-        self.$msg = msg
-            ? group_replace( msg, t, true )
-            : 'Token does not match "'+t+'"';
-        // used when end-of-file is reached and unmatched tokens exist in the queue
-        // to generate error message, if needed, as needed
-        queu = new Stack( [t, l1, c1, l2, c2, t_err( self )], queu );
-        if ( in_ctx )
-        {
-            if ( state.ctx ) state.ctx.val.queu = queu;
-        }
-        else
-        {
-            state.queu = queu;
-        }
-    }
-
-    else if ( A_UNIQUE === action )
-    {
-        if ( in_ctx )
-        {
-            if ( state.ctx ) symb = state.ctx.val.symb;
-            else return true;
-        }
-        else
-        {
-            symb = state.symb;
-        }
-        t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
-        if ( case_insensitive ) t0 = t0[LOWER]();
-        if ( !symb[HAS](ns) ) symb[ns] = { };
-        if ( symb[ns][HAS](t0) )
-        {
-            // duplicate
-            self.$msg = msg
-                ? group_replace( msg, t0, true )
-                : 'Duplicate "'+t0+'"';
-            err = t_err( self );
-            error_( state, symb[ns][t0][0], symb[ns][t0][1], symb[ns][t0][2], symb[ns][t0][3], self, err );
-            error_( state, l1, c1, l2, c2, self, err );
-            self.status |= ERROR;
-            return false;
-        }
-        else
-        {
-            symb[ns][t0] = [l1, c1, l2, c2];
-        }
-    }
     return true;
 }
 
@@ -678,17 +906,23 @@ function t_simple( t, stream, state, token, exception )
     // match non-space
     else if ( T_NONSPACE === type ) 
     { 
-        if ( (self.status & REQUIRED) && stream.spc() && !stream.eol() )
+        if ( (null != token.space) && !stream.eol() )
+        {
+            // space is already parsed, take it into account here
+            if ( self.status & REQUIRED ) self.status |= ERROR;
+        }
+        else if ( stream.spc() && !stream.eol() )
         {
             self.pos = stream.pos;
             stream.bck( pos );
-            self.status |= ERROR;
+            if ( self.status & REQUIRED ) self.status |= ERROR;
         }
         else
         {
             ret = true;
         }
         self.status &= CLEAR_REQUIRED;
+        if ( true === ret ) return ret;
     }
     // match up to end-of-line
     else if ( T_NULL === pattern ) 

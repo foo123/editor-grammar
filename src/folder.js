@@ -168,7 +168,7 @@ function find_match( dir, iter, row, col, tokenType, S, E, T, folding, commentTy
                 // NOTE: token can fail on some lines that continue e.g blocks
                 // since the previous line will have ended the block
                 // and the position of the new end delimiter will NOT be recognised as in the block
-                // FIXED partialy by semantic iunformation about comments, since this occurs mostly in comment delims
+                // FIXED partialy by semantic information about comments, since this occurs mostly in comment delims
                 if ( unconditional || commentType || (iter.token(i, pos+1) == tokenType) )
                 {
                     if ( pos === nextOpen ) ++depth;

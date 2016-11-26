@@ -255,11 +255,11 @@ for user-defined custom code token matching (see [above](#code-matching)).
 `Action` tokens enable the grammar parser to perform some extra context-specific parsing functionality on tokens.
 An `action` token in a grammar **applies only and directly to the token preceding it**. It performs an **action on that token only**.
 
-* `"action"` tokens can `start` (`"context":true`,`"hypercontext":true`) and `end` (`"context":false`,`"hypercontext":false`) a new dynamic `context` or `hypercontext` respectively so succesive actions take place in that (hyper)context, for example *unique object literal properties* and *unique xml tag attributes* and *localy-scoped variables* can be done his way, (see `test/grammars/xml.js` for an example)
+* `"action"` tokens can `start` (`"context":true`,`"hypercontext":true`) and `end` (`"context":false`,`"hypercontext":false`) a new dynamic `context` or `hypercontext` respectively so succesive actions take place in that (hyper)context, for example *unique object literal properties* and *unique xml tag attributes* and *localy-scoped variables* can be done this way, (see `test/grammars/xml.js` for an example)
 
-* `"action"` tokens can `define` a new symbol or can `undefine` an already defined symbol extracted from the (preceding) matched token
+* `"action"` tokens can `define` a new symbol or can `undefine` an already defined symbol extracted from the (preceding) matched token (very experimental)
 
-* `"action"` tokens can test if a symbol extracted from the (preceding) matched token is already `defined` or `notdefined`
+* `"action"` tokens can test if a symbol extracted from the (preceding) matched token is already `defined` or `notdefined` (very experimental)
 
 * `"action"` tokens can `push` or `pop` string `IDs` onto the data stack generated from the (preceding) matched token, for example *associated tag mathing* can be done this way, (see `test/grammars/xml.js` for an example)
 
@@ -314,7 +314,7 @@ An `action` token in a grammar **applies only and directly to the token precedin
 
 ```
 
-Action tokens (as well as `lookahead` tokens) enable (strong) context-sensitive parsing by supporting `lookbehind` and context-sensitive functionality. For example one (usual) way to define a (general) context-sensitive grammar production is:
+`Action` tokens (as well as `lookahead` tokens) enable (strong) context-sensitive parsing by supporting `lookbehind` and context-sensitive functionality. For example one (usual) way to define a (general) context-sensitive grammar production is:
 
 ```text
 Cb A Ca ==> B C
@@ -326,11 +326,11 @@ A production like the above will expand the `A` non-terminal depending on the su
 A ==> Cb> B C <Ca
 ```
 
-They become `lookbehind` (i.e `Cb>`) and `lookahead` (i.e `<Ca`) kind of tokens respectively. `Lookahead` tokens cover some of this functionality and (context) actions that store/lookup (previous) symbols cover the other functionality. Thus non-trivial context-sensitive parsing becomes possible in an otherwise simple grammar.
+They become `lookbehind` (i.e `Cb>`) and `lookahead` (i.e `<Ca`) kind of tokens respectively. `Lookahead` tokens cover some of this functionality and (context) actions that store/lookup (previous) symbols cover the other functionality. <!--In a sense, while `lookahead` tokens *parse without consuming* input, `lookbehind` tokens *consume without parsing*.--> Thus non-trivial context-sensitive parsing becomes possible in an otherwise simple grammar.
 
-One should not confuse *semantics* with *context-sensitivity*. For example that *"whether a symbol is already defined or is unique is a semantical action and not related to syntax"*. This is misleading because context-sensitive syntax in fact handles these examples. What would seem like *semantics* for what are called context-free grammars, is just *syntax* (in context, *context* implies *positional memory*) for so-called (general) context-sensitive grammars.
+One should not confuse *semantics* with *context-sensitivity* in grammar. For example that *"whether a symbol is already defined or is unique or matches another symbol is a semantical action and not related to syntax"*. This is misleading because context-sensitive syntax in fact handles these cases. What would seem like *semantics* for what are called context-free grammars, is just *syntax* (in context, *context* implies *positional memory*) for so-called (general) context-sensitive grammars. <!--Semantics (or even pragmatics for those who like to make such distinction) involves what the program *intends* to do, how it relates to external environment and the programmer and so on.-->
 
-There are other approaches to (mild or strong) context-sensitivity grammar parsing for example: using indices in productions ([indexed grammars](https://en.wikipedia.org/wiki/Indexed_grammar)) or attached attributes ([attribute grammars](https://en.wikipedia.org/wiki/Attribute_grammar)), [visibly pushdown grammars](https://en.wikipedia.org/wiki/Nested_word), [parsing expression grammars with lookaheads](https://en.wikipedia.org/wiki/Parsing_expression_grammar). This approach uses **a set of simple, generic and composable action tokens**, which can also support or simulate other approaches (e.g visibly pushdown tokens, lookahead tokens, lookbehind tokens, attached attributes, etc).
+There are other approaches to (mild or strong) context-sensitive grammar parsing for example: using indices in productions ([indexed grammars](https://en.wikipedia.org/wiki/Indexed_grammar)) or extra attached attributes ([attribute grammars](https://en.wikipedia.org/wiki/Attribute_grammar)), [visibly pushdown grammars](https://en.wikipedia.org/wiki/Nested_word), [parsing expression grammars with lookaheads](https://en.wikipedia.org/wiki/Parsing_expression_grammar). This approach uses **a set of simple, generic and composable action tokens**, which can also support or simulate other approaches (e.g visibly pushdown tokens, lookahead tokens, lookbehind tokens, attached attributes, etc). Another way to look at it is that `action` tokens enable to declaratively describe **non-linear syntax** (involving multiple correlated dimensions), which in the final analysis is *context-sensitivity* (eg positional memory and correlation).
 
 
 ####Lex shorthand type annotations
@@ -662,10 +662,14 @@ For example (see above):
 * handle arbitrary, user-defined, code `folding` (e.g via `fold action` token or via a `Fold` Model, see above)
 * handle arbitrary, user-defined, code `matching` (e.g `brackets`, `tags`, etc..) (e.g via `match action` token or via a `Match` Model, see above)
 * handle arbitrary, user-defined, code `(out-)indentation` (e.g via `indent action` token or via an `Indentation` Model)
-* handle arbitrary, user-defined, dynamic contexts via `context action` token
-* handle arbitrary, user-defined, unique identifiers via `unique action` token
-* handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token
-* handle arbitrary, user-defined, `local/global/scoped` relations via `scope action` token
+* handle arbitrary, user-defined, non-linear token/symbol matching via `push action` and `pop action` tokens
+* handle arbitrary, user-defined, dynamic contexts and hyper-contexts via `context action` and `hypercontext action` tokens
+* handle arbitrary, user-defined, dynamic symbol store and lookup functionality via `define action`, `defined action`, `undefine action` and `notdefined action` tokens
+* handle arbitrary, user-defined, unique/duplicate identifiers via `unique action` token
+
+<!--* handle arbitrary, user-defined, `(operator) precedence` relations via `precedence action` token
+* handle arbitrary, user-defined, `local/global/scoped` relations via `scope action` token-->
+
 * and so on..
 
 
