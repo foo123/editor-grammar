@@ -255,11 +255,15 @@ for user-defined custom code token matching (see [above](#code-matching)).
 `Action` tokens enable the grammar parser to perform some extra context-specific parsing functionality on tokens.
 An `action` token in a grammar **applies only and directly to the token preceding it**. It performs an **action on that token only**.
 
+* `"action"` tokens can `start` (`"context":true`,`"hypercontext":true`) and `end` (`"context":false`,`"hypercontext":false`) a new dynamic `context` or `hypercontext` respectively so succesive actions take place in that (hyper)context, for example *unique object literal properties* and *unique xml tag attributes* and *localy-scoped variables* can be done his way, (see `test/grammars/xml.js` for an example)
+
+* `"action"` tokens can `define` a new symbol or can `undefine` an already defined symbol extracted from the (preceding) matched token
+
+* `"action"` tokens can test if a symbol extracted from the (preceding) matched token is already `defined` or `notdefined`
+
 * `"action"` tokens can `push` or `pop` string `IDs` onto the data stack generated from the (preceding) matched token, for example *associated tag mathing* can be done this way, (see `test/grammars/xml.js` for an example)
 
 * `"action"` tokens can `check` the (preceding) matched token is unique, for example *unique identifiers checking* can be done this way, (see `test/grammars/xml.js` for an example)
-
-* `"action"` tokens can `start` (`"context":true`) and `end` (`"context":false`) a new dynamic `context` so succesive actions take place in that context, for example *unique object literal properties* and *unique xml tag attributes* can be done his way, (see `test/grammars/xml.js` for an example)
 
 * `"action"` tokens can generate a hard `error` in context (`"error":"error message"`), for example **special syntax errors** can be modeled, in the grammar, as needed, if needed, (see `test/grammars/xml.js` for an example)
 
@@ -267,6 +271,7 @@ An `action` token in a grammar **applies only and directly to the token precedin
 
 * multiple `"action"` tokens in sequence are applied to **the same preceding token**
 
+* `"action"` that are successful can transfer their style modifier (if they have) to the token itself (for example `scoped/local variables` can be handled this way)
 
 
 **Example:**
@@ -308,6 +313,25 @@ An `action` token in a grammar **applies only and directly to the token precedin
 // other stuff here..
 
 ```
+
+Action tokens (as well as `lookahead` tokens) enable (strong) context-sensitive parsing by supporting `lookbehind` and context-sensitive functionality. For example one (usual) way to define a (general) context-sensitive grammar production is:
+
+```text
+Cb A Ca ==> B C
+```
+
+A production like the above will expand the `A` non-terminal depending on the surrounding (*the context*) `Cb` (i.e *context before*) and `Ca` (i.e *context after*) (non-)terminals (using generic non-terminals results in strong context-sensitivity, also refered as *unrestricted*). By *transposing* the context (non-)terminals to the *other side* of the production rule, we get:
+
+```text
+A ==> Cb> B C <Ca
+```
+
+They become `lookbehind` (i.e `Cb>`) and `lookahead` (i.e `<Ca`) kind of tokens respectively. `Lookahead` tokens cover some of this functionality and (context) actions that store/lookup (previous) symbols cover the other functionality. Thus non-trivial context-sensitive parsing becomes possible in an otherwise simple grammar.
+
+One should not confuse *semantics* with *context-sensitivity*. For example that *"whether a symbol is already defined or is unique is a semantical action and not related to syntax"*. This is misleading because context-sensitive syntax in fact handles these examples. What would seem like *semantics* for what are called context-free grammars, is just *syntax* (in context, *context* implies *positional memory*) for so-called (general) context-sensitive grammars.
+
+There are other approaches to (mild or strong) context-sensitivity grammar parsing for example: using indices in productions ([indexed grammars](https://en.wikipedia.org/wiki/Indexed_grammar)) or attached attributes ([attribute grammars](https://en.wikipedia.org/wiki/Attribute_grammar)), [visibly pushdown grammars](https://en.wikipedia.org/wiki/Nested_word), [parsing expression grammars with lookaheads](https://en.wikipedia.org/wiki/Parsing_expression_grammar). This approach uses **a set of simple, generic and composable action tokens**, which can also support or simulate other approaches (e.g visibly pushdown tokens, lookahead tokens, lookbehind tokens, attached attributes, etc).
+
 
 ####Lex shorthand type annotations
 **(new, optional)**
