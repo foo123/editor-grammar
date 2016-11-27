@@ -19,8 +19,8 @@ function State( unique, s )
         self.outer = s.outer ? [s.outer[0], s.outer[1], new State(unique, s.outer[2])] : null;
         self.queu = s.queu || null;
         self.symb = s.symb || null;
-        self.ctx = s.ctx || null;
-        self.hctx = s.hctx || null;
+        self.ctx = s.ctx ? new Stack({symb:s.ctx.val.symb,queu:s.ctx.val.queu}, s.ctx.prev) : null;
+        self.hctx = s.hctx ? new Stack({symb:s.hctx.val.symb,queu:s.hctx.val.queu}, s.hctx.prev) : null;
         self.err = s.err || null;
         self.$eol$ = s.$eol$; self.$blank$ = s.$blank$;
     }
