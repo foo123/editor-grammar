@@ -680,26 +680,27 @@ var Parser = Class({
         return ret;
     }
 
-    ,autocompletion: function( state, min_found ) {
+    ,autocompletion: function( state, min_found, dynamic ) {
         var stack = state.stack, token, type,
-            hash = {}, follows = generate_autocompletion( [ state.token ], [], hash );
+            hash = {}, dynToks = dynamic ? generate_dynamic_autocompletion( state ) : null,
+            follows = generate_autocompletion( [ state.token ], [], hash, dynToks );
         min_found  = min_found || 0;
         while( stack )
         {
             token = stack.val; type = token.type;
             if ( T_REPEATED & type )
             {
-                follows = generate_autocompletion( [ token ], follows, hash );
+                follows = generate_autocompletion( [ token ], follows, hash, dynToks );
                 if ( (0 < token.min) && (min_found < follows.length) ) break;
             }
             else if ( (T_SIMPLE === type) || (T_ALTERNATION === type) || (T_SEQUENCE_OR_NGRAM & type) )
             {
-                follows = generate_autocompletion( [ token ], follows, hash );
+                follows = generate_autocompletion( [ token ], follows, hash, dynToks );
                 if ( min_found < follows.length ) break;
             }
             stack = stack.prev;
         }
-        return follows;
+        return dynToks && dynToks.length ? dynToks.concat(follows) : follows;
     }
     
     // overriden

@@ -496,7 +496,7 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb, found,
+    t, t0, ns, msg, queu, symb, found, autocomplete,
     l1, c1, l2, c2, in_ctx, in_hctx, err, t_str, is_block,
     no_state_errors = !(state.status & ERRORS);
 
@@ -509,7 +509,7 @@ function t_action( a, stream, state, token )
     if ( A_NOP === action_def[ 0 ] || is_block && !token.block ) return true;
 
     action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ]; in_hctx = action_def[ 3 ];
-    msg = self.msg;
+    autocomplete = action_def[ 4 ]; msg = self.msg;
     
     if ( is_block /*&& token.block*/ )
     {
@@ -577,15 +577,15 @@ function t_action( a, stream, state, token )
             {*/
             if ( in_hctx && state.hctx )
             {
-                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2]);
+                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
             else if ( in_ctx && state.ctx )
             {
-                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2]);
+                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
             else
             {
-                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2]);
+                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
             /*}*/
         }
@@ -790,15 +790,15 @@ function t_action( a, stream, state, token )
         {
             if ( in_hctx )
             {
-                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2]);
+                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
             else if ( in_ctx )
             {
-                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2]);
+                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
             else
             {
-                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2]);
+                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
             }
         }
     }
