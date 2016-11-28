@@ -271,7 +271,11 @@ An `action` token in a grammar **applies only and directly to the token precedin
 
 * multiple `"action"` tokens in sequence are applied to **the same preceding token**
 
-* `"action"` that are successful can transfer their style modifier (if they have) to the token itself (for example `scoped/local variables` can be handled this way)
+* `"actions"` that are successful can transfer their style modifier (if they have) to the token itself (for example `scoped/local variables` can be handled this way)
+
+
+**Note:** `unique` action is equivalent to a combination of `notdefined` and `define` actions, however for convenience of use and impementation it is taken as one action
+
 
 
 **Example:**
