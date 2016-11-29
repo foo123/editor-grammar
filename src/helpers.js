@@ -918,7 +918,7 @@ function generate_dynamic_autocompletion( state, follows )
         {
             if ( symb.val[1][7] )
             {
-                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0],symb.val[1][1],symb.val[1][2],symb.val[1][3]]} );
+                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
             }
             symb = symb.prev;
         }
@@ -932,7 +932,7 @@ function generate_dynamic_autocompletion( state, follows )
         {
             if ( symb.val[1][7] )
             {
-                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0],symb.val[1][1],symb.val[1][2],symb.val[1][3]]} );
+                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
             }
             symb = symb.prev;
         }
@@ -943,7 +943,7 @@ function generate_dynamic_autocompletion( state, follows )
     {
         if ( symb.val[1][7] )
         {
-            follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0],symb.val[1][1],symb.val[1][2],symb.val[1][3]]} );
+            follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
         }
         symb = symb.prev;
     }
