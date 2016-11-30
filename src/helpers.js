@@ -1166,12 +1166,15 @@ function parse_peg_bnf_notation( tok, Lex, Syntax )
                     // start of character select
                     /*if ( !token.length )
                     {*/
+                    c = t[CHAR]( t.pos+1 );
+                    if ( '^' === c ) t.pos++;
+                    else c = '';
                     literal = get_delimited( t, ']', '\\', 1 );
-                    curr_token = '[' + literal + ']';
+                    curr_token = '[' + c+literal + ']';
                     if ( !Lex[curr_token] )
                         Lex[curr_token] = {
                             type:'simple',
-                            tokens:new_re("^(["+('^'===literal[CHAR](0)?('^'+esc_re(literal.slice(1))):esc_re(literal))+"])")
+                            tokens:new_re("^(["+c+esc_re(literal)+"])")
                             //                                          negative match,      else   positive match
                         /*literal.split('')*/};
                     sequence.push( curr_token );
