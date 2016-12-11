@@ -501,7 +501,7 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb, found,
+    t, t0, ns, msg, queu, symb, found, raw = false,
     l1, c1, l2, c2, in_ctx, in_hctx, err, t_str, is_block,
     options, hash, list, no_state_errors = !(state.status & ERRORS);
 
@@ -521,12 +521,14 @@ function t_action( a, stream, state, token )
         t_str = token.block.match || token.block.str;
         l1 = token.block.pos[0][0];     c1 = token.block.pos[0][1];
         l2 = token.block.pos[0][2];     c2 = token.block.pos[0][3];
+        raw = true;
     }
     else
     {
         t_str = token.match || token.str;
         l1 = token.pos[0];              c1 = token.pos[1];
         l2 = token.pos[2];              c2 = token.pos[3];
+        raw = false;
     }
 
     if ( A_CTXEND === action )
@@ -554,7 +556,7 @@ function t_action( a, stream, state, token )
         hash = "hash" === options.mode;
         list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str );
+        t0 = group_replace( t0, t_str, raw );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
@@ -585,7 +587,7 @@ function t_action( a, stream, state, token )
         hash = "hash" === options.mode;
         list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str );
+        t0 = group_replace( t0, t_str, raw );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
@@ -616,7 +618,7 @@ function t_action( a, stream, state, token )
         hash = "hash" === options.mode;
         list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str );
+        t0 = group_replace( t0, t_str, raw );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
@@ -652,7 +654,7 @@ function t_action( a, stream, state, token )
         hash = "hash" === options.mode;
         list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str );
+        t0 = group_replace( t0, t_str, raw );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
@@ -715,7 +717,7 @@ function t_action( a, stream, state, token )
             symb = state[list];
         }
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str );
+        t0 = group_replace( t0, t_str, raw );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0; found = find_key(symb, ns, hash);
         if ( found )
@@ -762,7 +764,7 @@ function t_action( a, stream, state, token )
         }
         if ( t )
         {
-            t = group_replace( t, t_str );
+            t = group_replace( t, t_str, raw );
             if ( case_insensitive ) t = t[LOWER]();
             if ( !queu || t !== queu.val[0] ) 
             {
@@ -843,7 +845,7 @@ function t_action( a, stream, state, token )
         {
             queu = state.queu;
         }
-        t = group_replace( t, t_str );
+        t = group_replace( t, t_str, raw );
         if ( case_insensitive ) t = t[LOWER]();
         self.$msg = msg
             ? group_replace( msg, t, true )
