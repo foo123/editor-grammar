@@ -19,8 +19,9 @@ function State( unique, s )
         self.outer = s.outer ? [s.outer[0], s.outer[1], new State(unique, s.outer[2])] : null;
         self.queu = s.queu || null;
         self.symb = s.symb || null;
-        self.ctx = s.ctx ? new Stack({symb:s.ctx.val.symb,queu:s.ctx.val.queu}, s.ctx.prev) : null;
-        self.hctx = s.hctx ? new Stack({symb:s.hctx.val.symb,queu:s.hctx.val.queu}, s.hctx.prev) : null;
+        self.tabl = s.tabl || null;
+        self.ctx = s.ctx ? new Stack({tabl:s.ctx.val.tabl,symb:s.ctx.val.symb,queu:s.ctx.val.queu}, s.ctx.prev) : null;
+        self.hctx = s.hctx ? new Stack({tabl:s.hctx.val.tabl,symb:s.hctx.val.symb,queu:s.hctx.val.queu}, s.hctx.prev) : null;
         self.err = s.err || null;
         self.$eol$ = s.$eol$; self.$blank$ = s.$blank$;
     }
@@ -36,6 +37,7 @@ function State( unique, s )
         self.outer = null;
         self.queu = null;
         self.symb = null;
+        self.tabl = {};
         self.ctx = null;
         self.hctx = null;
         self.err = self.status & ERRORS ? {} : null;
@@ -85,6 +87,7 @@ function state_dispose( state )
     state.outer = null;
     state.queu = null;
     state.symb = null;
+    state.tabl = null;
     state.ctx = null;
     state.hctx = null;
     state.err = null;
@@ -680,27 +683,30 @@ var Parser = Class({
         return ret;
     }
 
-    ,autocompletion: function( state, min_found, dynamic ) {
-        var stack = state.stack, token, type,
-            hash = {}, dynToks = dynamic ? generate_dynamic_autocompletion( state ) : null,
-            follows = generate_autocompletion( [ state.token ], [], hash, dynToks );
+    ,autocompletion: function( state, min_found, dynamic_tokens ) {
+        var stack = state.stack, token, type, hash = {},
+            follows = generate_autocompletion( [ state.token ], [], hash, dynamic_tokens );
         min_found  = min_found || 0;
         while( stack )
         {
             token = stack.val; type = token.type;
             if ( T_REPEATED & type )
             {
-                follows = generate_autocompletion( [ token ], follows, hash, dynToks );
+                follows = generate_autocompletion( [ token ], follows, hash, dynamic_tokens );
                 if ( (0 < token.min) && (min_found < follows.length) ) break;
             }
             else if ( (T_SIMPLE === type) || (T_ALTERNATION === type) || (T_SEQUENCE_OR_NGRAM & type) )
             {
-                follows = generate_autocompletion( [ token ], follows, hash, dynToks );
+                follows = generate_autocompletion( [ token ], follows, hash, dynamic_tokens );
                 if ( min_found < follows.length ) break;
             }
             stack = stack.prev;
         }
-        return dynToks && dynToks.length ? dynToks.concat(follows) : follows;
+        return dynamic_tokens && dynamic_tokens.length ? dynamic_tokens.concat(follows) : follows;
+    }
+    
+    ,dynamic_autocompletion: function( state ) {
+        return state ? generate_dynamic_autocompletion( state ) || null : null;
     }
     
     // overriden
@@ -709,7 +715,7 @@ var Parser = Class({
         if ( false === parser )
         {
             // remove
-            if ( self.$subgrammars[HAS](name) )
+            if ( HAS.call(self.$subgrammars,name) )
                 delete self.$subgrammars[name];
         }
         else if ( parser )

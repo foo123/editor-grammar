@@ -1,8 +1,8 @@
 
 var undef = undefined, 
-    PROTO = 'prototype', HAS = 'hasOwnProperty', IS_ENUM = 'propertyIsEnumerable',
-    OP = Object[PROTO], toString = OP.toString, Extend = Object.create,
+    PROTO = 'prototype', OP = Object[PROTO], Extend = Object.create,
     MAX = Math.max, MIN = Math.min, LOWER = 'toLowerCase', CHAR = 'charAt',
+    toString = OP.toString, HAS = OP.hasOwnProperty, IS_ENUM = OP.propertyIsEnumerable,
     
     // types
     INF = Infinity,
@@ -175,7 +175,7 @@ function clone( o, deep )
         co = { };
         for (k in o) 
         {
-            if ( !o[HAS](k) || !o[IS_ENUM](k) ) continue;
+            if ( !HAS.call(o,k) || !IS_ENUM.call(o,k) ) continue;
             T2 = get_type( o[k] );
             
             if ( T_OBJ === T2 )         co[k] = deep ? clone( o[k], level>0 ? level-1 : deep ) : o[k];
@@ -237,8 +237,8 @@ function extend(/* var args here.. */)
         
         for (k in o2) 
         { 
-            if ( !o2[HAS](k) || !o2[IS_ENUM](k) ) continue;
-            if ( o[HAS](k) && o[IS_ENUM](k) ) 
+            if ( !HAS.call(o2,k) || !IS_ENUM.call(o2,k) ) continue;
+            if ( HAS.call(o,k) && IS_ENUM.call(o,k) ) 
             { 
                 T = get_type( o[k] ); T2 = get_type( o2[k] );
                 if ( T_OBJ === T && T_OBJ === T2 )
@@ -325,7 +325,7 @@ function Merge(/* var args here.. */)
         {
             for (p in o2)
             {            
-                if ( !o2[HAS](p) || !o2[IS_ENUM](p) ) continue;
+                if ( !HAS.call(o2,p) || !IS_ENUM.call(o2,p) ) continue;
                 
                 v = o2[p]; T = get_type( v );
                 
@@ -364,7 +364,7 @@ function Class( O, C )
         O = O || Object;
         C = C || { };
     }
-    if ( !C[HAS](CTOR) ) C[CTOR] = function( ){ };
+    if ( !HAS.call(C,CTOR) ) C[CTOR] = function( ){ };
     ctor = C[CTOR]; delete C[CTOR];
     ctor[PROTO] = Merge( Extend(O[PROTO]), C );
     ctor[PROTO][CTOR] = ctor;

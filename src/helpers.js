@@ -476,7 +476,7 @@ function preprocess_grammar( grammar )
         G = conf[i++];
         for (t in G)
         {
-            if ( !G[HAS](t) ) continue;
+            if ( !HAS.call(G,t) ) continue;
             id = t.split(':');
             type = id[1] && trim(id[1]).length ? trim(id[1]) : null;
             id = trim(id[0]);
@@ -562,7 +562,7 @@ function preprocess_grammar( grammar )
     G = Lex;
     for (id in G)
     {
-        if ( !G[HAS](id) ) continue;
+        if ( !HAS.call(G,id) ) continue;
         tok = G[id];
         // allow tokens to extend / reference other tokens
         while ( tok['extend'] )
@@ -588,12 +588,16 @@ function preprocess_grammar( grammar )
     G = Lex;
     for (id in G)
     {
-        if ( !G[HAS](id) ) continue;
+        if ( !HAS.call(G,id) ) continue;
         tok = G[id];
         if ( tok.type )
         {
             tl = tok.type = tok.type[LOWER]();
-            if ( 'line-block' === tl )
+            if ( 'action' === tl )
+            {
+                tok.options = tok.options||{};
+            }
+            else if ( 'line-block' === tl )
             {
                 tok.type = 'block';
                 tok.multiline = false;
@@ -660,79 +664,92 @@ function preprocess_grammar( grammar )
             else if ( tok['nop'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'nop', tok.nop, false ];
+                tok.options = tok.options||{};
+                tok.action = [ 'nop', tok.nop, tok.options ];
                 tok.nop = true;
             }
             else if ( tok['error'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'error', tok.error, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'error', tok.error, tok.options ];
                 del(tok,'error');
             }
-            else if ( tok[HAS]('hypercontext') )
+            else if ( HAS.call(tok,'hypercontext') )
             {
                 tok.type = 'action';
-                tok.action = [ !!tok.hypercontext ? 'hypercontext-start' : 'hypercontext-end', tok['hypercontext'], !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ !!tok.hypercontext ? 'hypercontext-start' : 'hypercontext-end', tok['hypercontext'], tok.options ];
                 del(tok,'hypercontext');
             }
-            else if ( tok[HAS]('context') )
+            else if ( HAS.call(tok,'context') )
             {
                 tok.type = 'action';
-                tok.action = [ !!tok.context ? 'context-start' : 'context-end', tok['context'], !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ !!tok.context ? 'context-start' : 'context-end', tok['context'], tok.options ];
                 del(tok,'context');
             }
             else if ( tok['indent'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'indent', tok.indent, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'indent', tok.indent, tok.options ];
                 del(tok,'indent');
             }
             else if ( tok['outdent'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'outdent', tok.outdent, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'outdent', tok.outdent, tok.options ];
                 del(tok,'outdent');
             }
             else if ( tok['define'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'define', T_STR&get_type(tok.define) ? ['*', tok.define] : tok.define, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'define', T_STR&get_type(tok.define) ? ['*', tok.define] : tok.define, tok.options ];
                 del(tok,'define');
             }
             else if ( tok['undefine'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'undefine', T_STR&get_type(tok.undefine) ? ['*', tok.undefine] : tok.undefine, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'undefine', T_STR&get_type(tok.undefine) ? ['*', tok.undefine] : tok.undefine, tok.options ];
                 del(tok,'undefine');
             }
             else if ( tok['defined'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'defined', T_STR&get_type(tok.defined) ? ['*', tok.defined] : tok.defined, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'defined', T_STR&get_type(tok.defined) ? ['*', tok.defined] : tok.defined, tok.options ];
                 del(tok,'defined');
             }
             else if ( tok['notdefined'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'notdefined', T_STR&get_type(tok.notdefined) ? ['*', tok.notdefined] : tok.notdefined, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'notdefined', T_STR&get_type(tok.notdefined) ? ['*', tok.notdefined] : tok.notdefined, tok.options ];
                 del(tok,'notdefined');
             }
             else if ( tok['unique'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'unique', T_STR&get_type(tok.unique) ? ['*', tok.unique] : tok.unique, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'unique', T_STR&get_type(tok.unique) ? ['*', tok.unique] : tok.unique, tok.options ];
                 del(tok,'unique');
             }
             else if ( tok['push'] )
             {
                 tok.type = 'action';
-                tok.action = [ 'push', tok.push, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'push', tok.push, tok.options ];
                 del(tok,'push');
             }
-            else if ( tok[HAS]('pop') )
+            else if ( HAS.call(tok,'pop') )
             {
                 tok.type = 'action';
-                tok.action = [ 'pop', tok.pop, !!tok['in-context'], !!tok['in-hypercontext'] ];
+                tok.options = tok.options||{};
+                tok.action = [ 'pop', tok.pop, tok.options ];
                 del(tok,'pop');
             }
             else
@@ -742,19 +759,23 @@ function preprocess_grammar( grammar )
         }
         if ( 'action' === tok.type )
         {
-            tok.ci = !!(tok.caseInsesitive||tok.ci);
-            tok.autocomplete = !!tok.autocomplete;
+            tok.options = tok.options||{};
+            tok.options['in-context'] = !!(tok.options['in-context'] || tok['in-context']);
+            tok.options['in-hypercontext'] = !!(tok.options['in-hypercontext'] || tok['in-hypercontext']);
+            tok.options.ci = tok.ci = !!(tok.options.caseInsesitive || tok.options.ci || tok.caseInsesitive || tok.ci);
+            tok.options.autocomplete = !!(tok.options.autocomplete || tok.autocomplete);
+            tok.options.mode = tok.options.mode || tok.mode;
         }
         else if ( 'block' === tok.type || 'comment' === tok.type )
         {
-            tok.multiline = tok[HAS]('multiline') ? !!tok.multiline : true;
+            tok.multiline = HAS.call(tok,'multiline') ? !!tok.multiline : true;
             if ( !(T_STR & get_type(tok.escape)) ) tok.escape = false;
         }
         else if ( 'simple' === tok.type )
         {
             //tok.autocomplete = !!tok.autocomplete;
             tok.meta = !!tok.autocomplete && (T_STR & get_type(tok.meta)) ? tok.meta : null;
-            //tok.combine = !tok[HAS]('combine') ? true : tok.combine;
+            //tok.combine = !HAS.call(tok,'combine') ? true : tok.combine;
             tok.ci = !!(tok.caseInsesitive||tok.ci);
         }
     }
@@ -763,7 +784,7 @@ function preprocess_grammar( grammar )
     G = Syntax;
     for (id in G)
     {
-        if ( !G[HAS](id) ) continue;
+        if ( !HAS.call(G,id) ) continue;
         tok = G[id];
         if ( T_OBJ === get_type(tok) && !tok.type )
         {
@@ -894,18 +915,26 @@ function preprocess_grammar( grammar )
 function generate_dynamic_autocompletion( state, follows )
 {
     follows = follows || [];
-    var list, symb;
+    var list, symb, n, entry;
     list = state.ctx;
     while ( list )
     {
         symb = list.val.symb;
         while ( symb )
         {
-            if ( symb.val[1][7] )
+            entry = symb.val[1];
+            if ( entry[7] )
             {
-                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
+                follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
             }
             symb = symb.prev;
+        }
+        symb = list.val.tabl;
+        for(n in symb)
+        {
+            if ( !HAS.call(symb, n) || !symb[n][7] ) continue;
+            entry = symb[n];
+            follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
         }
         list = list.prev;
     }
@@ -915,22 +944,38 @@ function generate_dynamic_autocompletion( state, follows )
         symb = list.val.symb;
         while ( symb )
         {
-            if ( symb.val[1][7] )
+            entry = symb.val[1];
+            if ( entry[7] )
             {
-                follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
+                follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
             }
             symb = symb.prev;
+        }
+        symb = list.val.tabl;
+        for(n in symb)
+        {
+            if ( !HAS.call(symb, n) || !symb[n][7] ) continue;
+            entry = symb[n];
+            follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
         }
         list = list.prev;
     }
     symb = state.symb;
     while ( symb )
     {
-        if ( symb.val[1][7] )
+        entry = symb.val[1];
+        if ( entry[7] )
         {
-            follows.push( {word:symb.val[1][5], meta:(symb.val[1][6]||'')+' at ('+(symb.val[1][0]+1)+','+(symb.val[1][1]+1)+')', ci:symb.val[1][8], token:symb.val[1][6], pos:[symb.val[1][0]+1,symb.val[1][1]+1,symb.val[1][2]+1,symb.val[1][3]+1]} );
+            follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
         }
         symb = symb.prev;
+    }
+    symb = state.tabl;
+    for(n in symb)
+    {
+        if ( !HAS.call(symb, n) || !symb[n][7] ) continue;
+        entry = symb[n];
+        follows.push( {word:entry[5], meta:(entry[6]||'')+' at ('+(entry[0]+1)+','+(entry[1]+1)+')', ci:entry[8], token:entry[6], pos:[entry[0]+1,entry[1]+1,entry[2]+1,entry[3]+1]} );
     }
     return follows;
 }
@@ -966,7 +1011,7 @@ function generate_autocompletion( token, follows, hash, dynamic )
                 for(j=0,m=tok.autocompletions.length; j<m; j++)
                 {
                     w = tok.autocompletions[j];
-                    if ( !hash[HAS]('w_'+w.word) )
+                    if ( !HAS.call(hash,'w_'+w.word) )
                     {
                         follows.push( w );
                         hash['w_'+w.word] = 1;
@@ -975,7 +1020,7 @@ function generate_autocompletion( token, follows, hash, dynamic )
             }
             else if ( (T_STR === tok.token.ptype) && (T_STR&get_type(tok.token.pattern)) && (tok.token.pattern.length > 1) )
             {
-                if ( !hash[HAS]('w_'+tok.token.pattern) )
+                if ( !HAS.call(hash,'w_'+tok.token.pattern) )
                 {
                     follows.push( {word:''+tok.token.pattern, meta:tok.name, ci:!!tok.ci} );
                     hash['w_'+tok.token.pattern] = 1;
@@ -1537,25 +1582,32 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
 
     if ( T_ACTION & $type$ )
     {
-        if ( !token[HAS]('action') )
+        token.options = token.options||{};
+        token.options['in-context'] = !!(token.options['in-context'] || token['in-context']);
+        token.options['in-hypercontext'] = !!(token.options['in-hypercontext'] || token['in-hypercontext']);
+        token.options.ci = token.ci = !!(token.options.caseInsesitive || token.options.ci || token.caseInsesitive || token.ci);
+        token.options.autocomplete = !!(token.options.autocomplete || token.autocomplete);
+        token.options.mode = token.options.mode || token.mode;
+        
+        if ( !HAS.call(token,'action') )
         {
-            if ( token[HAS]('nop') ) token.action = [A_NOP, token.nop, !!token['in-context'], !!token['in-hypercontext'], false];
-            else if ( token[HAS]('error') ) token.action = [A_ERROR, token.error, false, false, false];
-            else if ( token[HAS]('context') ) token.action = [!!token.context?A_CTXSTART:A_CTXEND, token['context'], false, false, false];
-            else if ( token[HAS]('hypercontext') ) token.action = [!!token.hypercontext?A_HYPCTXSTART:A_HYPCTXEND, token['hypercontext'], false, false, false];
-            else if ( token[HAS]('context-start') ) token.action = [A_CTXSTART, token['context-start'], false, false, false];
-            else if ( token[HAS]('context-end') ) token.action = [A_CTXEND, token['context-end'], false, false, false];
-            else if ( token[HAS]('hypercontext-start') ) token.action = [A_HYPCTXSTART, token['hypcontext-start'], false, false, false];
-            else if ( token[HAS]('hypercontext-end') ) token.action = [A_HYPCTXEND, token['hypcontext-end'], false, false, false];
-            else if ( token[HAS]('push') ) token.action = [A_MCHSTART, token.push, !!token['in-context'], !!token['in-hypercontext'], token['autocomplete']];
-            else if ( token[HAS]('pop') ) token.action = [A_MCHEND, token.pop, !!token['in-context'], !!token['in-hypercontext'], false];
-            else if ( token[HAS]('define') ) token.action = [A_DEFINE, T_STR&get_type(token.define)?['*',token.define]:token.define, !!token['in-context'], !!token['in-hypercontext'], token['autocomplete']];
-            else if ( token[HAS]('undefine') ) token.action = [A_UNDEFINE, T_STR&get_type(token.undefine)?['*',token.undefine]:token.undefine, !!token['in-context'], !!token['in-hypercontext'], token['autocomplete']];
-            else if ( token[HAS]('defined') ) token.action = [A_DEFINED, T_STR&get_type(token.defined)?['*',token.defined]:token.defined, !!token['in-context'], !!token['in-hypercontext'], false];
-            else if ( token[HAS]('notdefined') ) token.action = [A_NOTDEFINED, T_STR&get_type(token.notdefined)?['*',token.notdefined]:token.notdefined, !!token['in-context'], !!token['in-hypercontext'], false];
-            else if ( token[HAS]('unique') ) token.action = [A_UNIQUE, T_STR&get_type(token.unique)?['*',token.unique]:token.unique, !!token['in-context'], !!token['in-hypercontext'], token['autocomplete']];
-            else if ( token[HAS]('indent') ) token.action = [A_INDENT, token.indent, !!token['in-context'], !!token['in-hypercontext'], false];
-            else if ( token[HAS]('outdent') ) token.action = [A_OUTDENT, token.outdent, !!token['in-context'], !!token['in-hypercontext'], false];
+            if ( HAS.call(token,'nop') ) token.action = [A_NOP, token.nop, token['options']];
+            else if ( HAS.call(token,'error') ) token.action = [A_ERROR, token.error, token['options']];
+            else if ( HAS.call(token,'context') ) token.action = [!!token.context?A_CTXSTART:A_CTXEND, token['context'], token['options']];
+            else if ( HAS.call(token,'hypercontext') ) token.action = [!!token.hypercontext?A_HYPCTXSTART:A_HYPCTXEND, token['hypercontext'], token['options']];
+            else if ( HAS.call(token,'context-start') ) token.action = [A_CTXSTART, token['context-start'], token['options']];
+            else if ( HAS.call(token,'context-end') ) token.action = [A_CTXEND, token['context-end'], token['options']];
+            else if ( HAS.call(token,'hypercontext-start') ) token.action = [A_HYPCTXSTART, token['hypcontext-start'], token['options']];
+            else if ( HAS.call(token,'hypercontext-end') ) token.action = [A_HYPCTXEND, token['hypcontext-end'], token['options']];
+            else if ( HAS.call(token,'push') ) token.action = [A_MCHSTART, token.push, token['options']];
+            else if ( HAS.call(token,'pop') ) token.action = [A_MCHEND, token.pop, token['options']];
+            else if ( HAS.call(token,'define') ) token.action = [A_DEFINE, T_STR&get_type(token.define)?['*',token.define]:token.define, token['options']];
+            else if ( HAS.call(token,'undefine') ) token.action = [A_UNDEFINE, T_STR&get_type(token.undefine)?['*',token.undefine]:token.undefine, token['options']];
+            else if ( HAS.call(token,'defined') ) token.action = [A_DEFINED, T_STR&get_type(token.defined)?['*',token.defined]:token.defined, token['options']];
+            else if ( HAS.call(token,'notdefined') ) token.action = [A_NOTDEFINED, T_STR&get_type(token.notdefined)?['*',token.notdefined]:token.notdefined, token['options']];
+            else if ( HAS.call(token,'unique') ) token.action = [A_UNIQUE, T_STR&get_type(token.unique)?['*',token.unique]:token.unique, token['options']];
+            else if ( HAS.call(token,'indent') ) token.action = [A_INDENT, token.indent, token['options']];
+            else if ( HAS.call(token,'outdent') ) token.action = [A_OUTDENT, token.outdent, token['options']];
         }
         else
         {
@@ -1578,8 +1630,9 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
         if ( false === token.msg ) $msg$ = false;
         // NOP action, no action
         if ( token.nop ) token.action[0] = A_NOP;
+        //if ( token.action.length < 3 ) token.action.push( token.options );
         $token$ = new tokenizer( T_ACTION, tokenID, token.action.slice(), $msg$, $modifier$ );
-        $token$.ci = !!token.caseInsensitive||token.ci;
+        $token$.ci = !!(token.options.caseInsensitive || token.options.ci || token.caseInsensitive || token.ci);
         // pre-cache tokenizer to handle recursive calls to same tokenizer
         cachedTokens[ tokenID ] = $token$;
     }
@@ -1642,9 +1695,9 @@ function get_tokenizer( tokenID, RegExpID, Lex, Syntax, Style,
                         get_blockmatcher( tokenID, $tokens$.slice(), RegExpID, cachedRegexes, cachedMatchers ), 
                         $msg$
                     );
-            $token$.empty = token[HAS]('empty') ? !!token.empty : true;
-            $token$.mline = token[HAS]('multiline') ? !!token.multiline : true;
-            $token$.esc = token[HAS]('escape') ? token.escape : false;
+            $token$.empty = HAS.call(token,'empty') ? !!token.empty : true;
+            $token$.mline = HAS.call(token,'multiline') ? !!token.multiline : true;
+            $token$.esc = HAS.call(token,'escape') ? token.escape : false;
             // allow block delims / block interior to have different styles
             $token$.inter = !!Style[ tokenID + '.inside' ];
             if ( (T_COMMENT === $type$) && token.interleave ) interleavedTokens.push( t_clone( $token$ ) );
@@ -1739,14 +1792,14 @@ function get_block_types( grammar, the_styles )
         blocks = [], visited = {};
     for (t in Style )
     {
-        if ( !Style[HAS](t) ) continue;
+        if ( !HAS.call(Style,t) ) continue;
         T = Lex[t] || Syntax[t];
         if ( T && ('block' == T.type || 'comment' === T.type) )
         {
             if ( the_styles && (Style[ t+'.inside' ]||Style[ t ]) )
             {
                 t = Style[ t+'.inside' ] || Style[ t ];
-                if ( !visited[HAS](t) )
+                if ( !HAS.call(visited,t) )
                 {
                     blocks.push( t );
                     visited[t] = 1;
@@ -1754,7 +1807,7 @@ function get_block_types( grammar, the_styles )
             }
             else if ( !the_styles )
             {
-                if ( !visited[HAS](t) )
+                if ( !HAS.call(visited,t) )
                 {
                     blocks.push( t );
                     visited[t] = 1;

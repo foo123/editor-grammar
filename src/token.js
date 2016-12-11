@@ -298,58 +298,63 @@ function error_( state, l1, c1, l2, c2, t, err )
     //return state;
 }
 
-function find_key( list, key/*, recursive, least, hash*/ )
+function find_key( list, key, hash )
 {
-    /*if ( hash )
+    var match = null;
+    if ( hash )
     {
-        return list && list[HAS](key) ? list[key] : null;
-    }
-    else if ( recursive )
-    {
-        var nodeNext, listNext, node, match;
-        listNext = null;
-        while ( list )
+        if ( list && HAS.call(list,key) )
         {
-            node = list.val.symb; nodeNext = null;
-            while ( node )
-            {
-                if ( key === node.val[0] )
-                {
-                    match = {list:list, listPrev:list.prev, listNext:listNext, node:node, nodePrev:node.prev, nodeNext:nodeNext, val:node.val[1]};
-                    return match;
-                }
-                nodeNext = node; node = node.prev;
-            }
-            listNext = list; list = list.prev;
+            match = {list:list, key:key, val:list[key]};
         }
     }
     else
-    {*/
-        var next = null, match = null;
+    {
+        var next = null, root = list;
         while ( list )
         {
             if ( key === list.val[0] )
             {
-                match = {node:list, nodePrev:list.prev, nodeNext:next, val:list.val[1]};
-                /*if ( !least )*/ return match;
+                match = {list:root, node:list, nodePrev:list.prev, nodeNext:next, key:key, val:list.val[1]};
+                break;
             }
             next = list; list = list.prev;
         }
-        return match;
-    /*}*/
+    }
+    return match;
 }
 
-function add_key( list, key, val/*, hash*/ )
+function add_key( list, key, val, hash )
 {
-    /*if ( hash )
+    if ( hash )
     {
         list[key] = val;
         return list;
     }
     else
-    {*/
+    {
         return new Stack([key,val], list);
-    /*}*/
+    }
+}
+
+function del_key( match, hash )
+{
+    if ( hash )
+    {
+        delete match.list[match.key];
+    }
+    else
+    {
+        if ( match.nodeNext )
+        {
+            match.nodeNext.prev = match.nodePrev;
+        }
+        else
+        {
+            match.list = match.list.prev;
+        }
+    }
+    return match.list;
 }
 
 function push_at( state, pos, token )
@@ -496,9 +501,9 @@ function t_action( a, stream, state, token )
 {
     var self = a, action_def = self.token || null,
     action, case_insensitive = self.ci, aid = self.name,
-    t, t0, ns, msg, queu, symb, found, autocomplete,
+    t, t0, ns, msg, queu, symb, found,
     l1, c1, l2, c2, in_ctx, in_hctx, err, t_str, is_block,
-    no_state_errors = !(state.status & ERRORS);
+    options, hash, list, no_state_errors = !(state.status & ERRORS);
 
     self.status = 0; self.$msg = null;
 
@@ -508,8 +513,8 @@ function t_action( a, stream, state, token )
     // NOP action, return OR partial block not completed yet, postpone
     if ( A_NOP === action_def[ 0 ] || is_block && !token.block ) return true;
 
-    action = action_def[ 0 ]; t = action_def[ 1 ]; in_ctx = action_def[ 2 ]; in_hctx = action_def[ 3 ];
-    autocomplete = action_def[ 4 ]; msg = self.msg;
+    action = action_def[ 0 ]; t = action_def[ 1 ]; options = action_def[ 2 ] || {}; msg = self.msg;
+    in_ctx = options['in-context']; in_hctx = options['in-hypercontext'];
     
     if ( is_block /*&& token.block*/ )
     {
@@ -531,7 +536,7 @@ function t_action( a, stream, state, token )
 
     else if ( A_CTXSTART === action )
     {
-        state.ctx = new Stack({symb:null,queu:null}, state.ctx);
+        state.ctx = new Stack({tabl:{},symb:null,queu:null}, state.ctx);
     }
 
     else if ( A_HYPCTXEND === action )
@@ -541,150 +546,92 @@ function t_action( a, stream, state, token )
 
     else if ( A_HYPCTXSTART === action )
     {
-        state.hctx = new Stack({symb:null,queu:null}, state.hctx);
+        state.hctx = new Stack({tabl:{},symb:null,queu:null}, state.hctx);
     }
 
     else if ( A_DEFINE === action )
     {
+        hash = "hash" === options.mode;
+        list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
+        t0 = group_replace( t0, t_str );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
         {
-            found = find_key(state.hctx.val.symb, ns);
+            found = find_key(state.hctx.val[list], ns, hash);
         }
         else if ( in_ctx && state.ctx )
         {
-            found = find_key(state.ctx.val.symb, ns);
-        }
-        else if ( state.symb )
-        {
-            found = find_key(state.symb, ns);
+            found = find_key(state.ctx.val[list], ns, hash);
         }
         else
         {
-            found = null;
+            found = find_key(state[list], ns, hash);
         }
-        if ( !found /*|| (found.val[0] > l1) || ((found.val[0] === l1) && (found.val[1] > c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] > l2) || (found.val[3] > c2)))*/ )
+        if ( !found )
         {
-            /*if ( found )
-            {
-                found.val[0] = l1; found.val[1] = c1;
-                found.val[2] = l2; found.val[3] = c2;
-            }
-            else
-            {*/
             if ( in_hctx && state.hctx )
-            {
-                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
+                state.hctx.val[list] = add_key(state.hctx.val[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
             else if ( in_ctx && state.ctx )
-            {
-                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
+                state.ctx.val[list] = add_key(state.ctx.val[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
             else
-            {
-                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
-            /*}*/
+                state[list] = add_key(state[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
         }
     }
     
     else if ( A_UNDEFINE === action )
     {
+        hash = "hash" === options.mode;
+        list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
+        t0 = group_replace( t0, t_str );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
         {
-            found = find_key(state.hctx.val.symb, ns);
+            found = find_key(state.hctx.val[list], ns, hash);
         }
         else if ( in_ctx && state.ctx )
         {
-            found = find_key(state.ctx.val.symb, ns);
-        }
-        else if ( state.symb )
-        {
-            found = find_key(state.symb, ns);
+            found = find_key(state.ctx.val[list], ns, hash);
         }
         else
         {
-            return true;
+            found = find_key(state[list], ns, hash);
         }
-        if ( found /*&& ((found.val[0] < l1) || ((found.val[0] === l1) && (found.val[1] <= c1)))*/ )
+        if ( found )
         {
-            /*if ( found.list )
-            {
-                if ( found.nodeNext )
-                {
-                    found.nodeNext.prev = found.nodePrev;
-                }
-                else
-                {
-                    if ( in_hctx && state.hctx )
-                    {
-                        state.hctx.val.symb = found.listPrev;
-                    }
-                    else if ( in_ctx && state.ctx )
-                    {
-                        state.ctx.val.symb = found.listPrev;
-                    }
-                    else
-                    {
-                        state.symb = found.listPrev;
-                    }
-                }
-            }
+            if ( in_hctx && state.hctx )
+                state.hctx.val[list] = del_key( found, hash );
+            else if ( in_ctx && state.ctx )
+                state.ctx.val[list] = del_key( found, hash );
             else
-            {*/
-                if ( found.nodeNext )
-                {
-                    found.nodeNext.prev = found.nodePrev;
-                }
-                else
-                {
-                    if ( in_hctx && state.hctx )
-                    {
-                        state.hctx.val.symb = state.hctx.val.symb.prev;
-                    }
-                    else if ( in_ctx && state.ctx )
-                    {
-                        state.ctx.val.symb = state.ctx.val.symb.prev;
-                    }
-                    else
-                    {
-                        state.symb = state.symb.prev;
-                    }
-                }
-            /*}*/
+                state[list] = del_key( found, hash );
         }
     }
     
     else if ( A_DEFINED === action )
     {
+        hash = "hash" === options.mode;
+        list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
+        t0 = group_replace( t0, t_str );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
         {
-            found = find_key(state.hctx.val.symb, ns);
+            found = find_key(state.hctx.val[list], ns, hash);
         }
         else if ( in_ctx && state.ctx )
         {
-            found = find_key(state.ctx.val.symb, ns);
-        }
-        else if ( state.symb )
-        {
-            found = find_key(state.symb, ns);
+            found = find_key(state.ctx.val[list], ns, hash);
         }
         else
         {
-            found = null;
+            found = find_key(state[list], ns, hash);
         }
-        if ( !found /*|| (found.val[0] > l1) || ((found.val[0] === l1) && (found.val[1] > c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] > l2) || (found.val[3] > c2)))*/ )
+        if ( !found )
         {
             // undefined
             if ( false !== msg )
@@ -702,27 +649,25 @@ function t_action( a, stream, state, token )
     
     else if ( A_NOTDEFINED === action )
     {
+        hash = "hash" === options.mode;
+        list = hash ? "tabl" : "symb";
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
+        t0 = group_replace( t0, t_str );
         if ( case_insensitive ) t0 = t0[LOWER]();
         ns += '::'+t0;
         if ( in_hctx && state.hctx )
         {
-            found = find_key(state.hctx.val.symb, ns);
+            found = find_key(state.hctx.val[list], ns, hash);
         }
         else if ( in_ctx && state.ctx )
         {
-            found = find_key(state.ctx.val.symb, ns);
-        }
-        else if ( state.symb )
-        {
-            found = find_key(state.symb, ns);
+            found = find_key(state.ctx.val[list], ns, hash);
         }
         else
         {
-            return true;
+            found = find_key(state[list], ns, hash);
         }
-        if ( found /*&& ((found.val[0] < l1) || ((found.val[0] === l1) && (found.val[1] <= c1)) || ((found.val[0] === l1) && (found.val[1] === c1) && ((found.val[2] <= l2) && (found.val[3] <= c2))))*/ )
+        if ( found )
         {
             // defined
             if ( false !== msg )
@@ -753,24 +698,26 @@ function t_action( a, stream, state, token )
 
     else if ( A_UNIQUE === action )
     {
+        hash = "hash" === options.mode;
+        list = hash ? "tabl" : "symb";
         if ( in_hctx )
         {
-            if ( state.hctx ) symb = state.hctx.val.symb;
+            if ( state.hctx ) symb = state.hctx.val[list];
             else return true;
         }
         else if ( in_ctx )
         {
-            if ( state.ctx ) symb = state.ctx.val.symb;
+            if ( state.ctx ) symb = state.ctx.val[list];
             else return true;
         }
         else
         {
-            symb = state.symb;
+            symb = state[list];
         }
         t0 = t[1]; ns = t[0];
-        t0 = group_replace( t0, t_str, true );
+        t0 = group_replace( t0, t_str );
         if ( case_insensitive ) t0 = t0[LOWER]();
-        ns += '::'+t0; found = find_key(symb, ns);
+        ns += '::'+t0; found = find_key(symb, ns, hash);
         if ( found )
         {
             // duplicate
@@ -789,17 +736,11 @@ function t_action( a, stream, state, token )
         else
         {
             if ( in_hctx )
-            {
-                state.hctx.val.symb = add_key(state.hctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
+                state.hctx.val[list] = add_key(state.hctx.val[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
             else if ( in_ctx )
-            {
-                state.ctx.val.symb = add_key(state.ctx.val.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
+                state.ctx.val[list] = add_key(state.ctx.val[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
             else
-            {
-                state.symb = add_key(state.symb, ns, [l1, c1, l2, c2, ns, t0, token.type, autocomplete, case_insensitive]);
-            }
+                state[list] = add_key(state[list], ns, [l1, c1, l2, c2, ns, t0, token.type, !!options.autocomplete, case_insensitive], hash);
         }
     }
     
