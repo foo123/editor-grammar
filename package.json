@@ -1,0 +1,29 @@
+{
+  "name": "editor-grammar",
+  "version": "4.2.2",
+  "description": "Invariant Codebase of editor-grammar",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint . --ext .js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/foo123/editor-grammar.git"
+  },
+  "keywords": [
+    "grammar-specification",
+    "bnf",
+    "peg",
+    "syntax-hightlight-parser"
+  ],
+  "author": "Nikos M <nikosms0@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/foo123/editor-grammar/issues"
+  },
+  "homepage": "https://github.com/foo123/editor-grammar#readme",
+  "devDependencies": {
+    "eslint": "^6.8.0"
+  }
+}
